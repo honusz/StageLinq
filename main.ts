@@ -32,12 +32,16 @@ async function listenerTest() {
 			p_info.software
 		);
 	};
-
+	const unannounced = function (p_id: number, p_info: ConnectionInfo) {
+		console.info(
+			`'${p_info.source}' Controller with ID '${p_id}' at '${p_info.address}:${p_info.port}' announced disconnection`
+		);
+	};
 	const lost = function (p_id: number) {
 		console.info(`Controller with ID '${p_id}' is lost`);
 	};
 
-	new Listener(detected, lost, 1000);
+	new Listener(detected, unannounced, lost, 1000);
 
 	while (true) {
 		await sleep(1000);

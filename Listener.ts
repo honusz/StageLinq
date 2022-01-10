@@ -8,6 +8,7 @@ export interface ConnectionInfo extends DiscoveryMessage {
 }
 
 export type DeviceDetectedCallback = (deviceIndex: number, connectionInfo: ConnectionInfo) => void;
+export type DeviceUnannouncedCallback = (deviceIndex: number, connectionInfo: ConnectionInfo) => void;
 export type DeviceLostCallback = (deviceIndex: number) => void;
 
 function readConnectionInfo(p_ctx: ReadContext, p_address: string): ConnectionInfo {
@@ -46,6 +47,7 @@ type DeviceList = {
 
 export class Listener {
 	private detected: DeviceDetectedCallback = null;
+	private unnanounced: DeviceUnannouncedCallback = null;
 	private lost: DeviceLostCallback = null;
 	private listenTimeout: number = null;
 	private listenTimer: NodeJS.Timeout = null;
@@ -55,11 +57,13 @@ export class Listener {
 
 	constructor(
 		p_detected: DeviceDetectedCallback,
+		p_unannounced: DeviceUnannouncedCallback,
 		p_lost: DeviceLostCallback,
 		p_cleanupInterval: number,
 		p_listenTimeout: number = LISTEN_TIMEOUT
 	) {
 		this.detected = p_detected;
+		this.unnanounced = p_unannounced;
 		this.lost = p_lost;
 		this.listenTimeout = p_listenTimeout;
 
@@ -92,20 +96,32 @@ export class Listener {
 			// We actually found a device, no need to timeout anymore
 			clearTimeout(this.listenTimer);
 			this.listenTimer = null;
-
-			assert(result.action === Action.Login);
+			//Handle HOWDY and EXIT messages
+			assert((result.action === Action.Login) || (result.action === Action.Logout)) ;
 			// FIXME: find other way to generate unique key for this device
 			const key = `${JSON.stringify(result.token)}`;
 
 			const timeStamp = getTimeStamp();
-			if (this.foundDevices.hasOwnProperty(key)) {
-				this.foundDevices[key].time = timeStamp;
-			} else {
-				this.foundDevices[key] = {
-					time: timeStamp,
-					id: id++,
-				};
-				this.detected(this.foundDevices[key].id, result);
+			switch (result.action) {
+				case Action.Login:
+					if (this.foundDevices.hasOwnProperty(key)) {
+						this.foundDevices[key].time = timeStamp;
+					} else {
+						this.foundDevices[key] = {
+							time: timeStamp,
+							id: id++,
+						};
+						this.detected(this.foundDevices[key].id, result);
+					}
+					break;
+				case Action.Logout:
+					if (this.foundDevices.hasOwnProperty(key)) {
+						this.foundDevices[key].time = timeStamp;
+					} 	
+					this.unnanounced(this.foundDevices[key].id, result);
+					break;
+				default:
+					break;
 			}
 		});
 
