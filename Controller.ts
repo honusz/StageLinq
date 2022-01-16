@@ -9,6 +9,7 @@ import * as tcp from './utils/tcp';
 import * as services from './services';
 import * as fs from 'fs';
 import Database = require('better-sqlite3');
+import  * as net from 'net';
 
 interface ConnectionInfo extends DiscoveryMessage {
 	address: string;
@@ -79,6 +80,7 @@ export class Controller {
 	//private source: string = null;
 	private address: string = null;
 	private port: number = 0;
+	public localPort: number = 0;
 	private serviceRequestAllowed = false;
 	private servicePorts: ServicePorts = {};
 	private services: Services = {
@@ -126,6 +128,27 @@ export class Controller {
 		this.connection = null;
 	}
 
+	async discoveryListen(): Promise<number> {
+		return await new Promise((resolve, reject) => {
+			const server = net.createServer((socket) => {
+				socket.on('error', (err) => {
+					reject(err);
+				});
+				socket.on('data', async data => {
+					console.log(`message from: ${socket.remoteAddress}:${socket.remotePort}`);
+					this.messageHandler(data);
+				});
+				server.on('connection', (socket) => {
+					console.log(`connection from: ${socket.remoteAddress}:${socket.remotePort}`);
+				});
+			}).listen(0, '0.0.0.0', () => {
+				const { address, port } = server.address() as net.AddressInfo;
+				console.log(address,port);
+				console.log(`opened server on ${address}:${port}`);
+				resolve(port)
+			});
+		});
+	}
 	///////////////////////////////////////////////////////////////////////////
 	// Message Handler
 
@@ -133,13 +156,17 @@ export class Controller {
 		const ctx = new ReadContext(p_message.buffer, false);
 		while (ctx.isEOF() === false) {
 			const id = ctx.readUInt32();
+			
+			console.log(`message received ${MessageId[id]}`)
 			// FIXME: Verify token
-			ctx.seek(16); // Skip token; present in all messages
+			let token1 = ctx.read(16); // Skip token; present in all messages
 			switch (id) {
 				case MessageId.TimeStamp:
-					ctx.seek(16); // Skip token; present in all messages
+					let token2 = ctx.read(16); // Skip token; present in all messages
 					// Time Alive is in nanoseconds; convert back to seconds
-					this.timeAlive = Number(ctx.readUInt64() / (1000n * 1000n * 1000n));
+					//this.timeAlive = Number(ctx.readUInt64() / (1000n * 1000n * 1000n));
+					let counter = ctx.readUInt32()
+					let unknownBytes = ctx.readUInt32()
 					break;
 				case MessageId.ServicesAnnouncement:
 					const service = ctx.readNetworkStringUTF16();

@@ -5,7 +5,22 @@ export const MESSAGE_TIMEOUT = 3000; // in ms
 export const CONNECT_TIMEOUT = 5000; // in ms
 export const DOWNLOAD_TIMEOUT = 10000; // in ms
 export const DISCOVERY_MESSAGE_MARKER = 'airD';
-export const CLIENT_TOKEN = new Uint8Array([82, 253, 252, 7, 33, 130, 101, 79, 22, 63, 95, 15, 154, 98, 29, 114]);
+
+//this token works every time. 
+//export const CLIENT_TOKEN = new Uint8Array([255, 255, 255, 255, 255, 255, 74, 28, 155, 186, 136, 180, 190, 25, 163, 209]);
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// A certain portion of the end of the token seems to be able to be randomized and the Controller will still try to initiate the connection. 
+// If too much of the token is random (i.e. not conforming somehow), then the Controller won't try to connect to us.
+// Removing elements from the end of the CLIENT_TOKEN_part1 array will fill the remaining portion with random bytes.
+const CLIENT_TOKEN_part1 = new Uint8Array([255, 255, 255, 255, 255, 255, 74, 28, 155, 186, 136, 180])
+const CLIENT_TOKEN_part2 = Uint8Array.from({ length: (16 - CLIENT_TOKEN_part1.length) }, () => Math.random() * 255);
+let mergedToken = new Uint8Array(16);
+mergedToken.set(CLIENT_TOKEN_part1);
+mergedToken.set(CLIENT_TOKEN_part2, CLIENT_TOKEN_part1.length);
+export const CLIENT_TOKEN = mergedToken;
+
+console.log(`CLIENT TOKEN: ${CLIENT_TOKEN}`);
 
 export enum Action {
 	Login = 'DISCOVERER_HOWDY_',

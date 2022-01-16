@@ -102,7 +102,7 @@ export async function unannounce(): Promise<void> {
 	//console.info("Unannounced myself");
 }
 
-export async function announce(): Promise<void> {
+export async function announce(p_port: number): Promise<void> {
 	if (announceTimer) {
 		return;
 	}
@@ -110,6 +110,7 @@ export async function announce(): Promise<void> {
 	if (!announceClient) announceClient = await initUdpSocket();
 
 	announcementMessage.action = Action.Login;
+	announcementMessage.port = p_port;
 	const ctx = new WriteContext();
 	writeDiscoveryMessage(ctx, announcementMessage);
 	const msg = new Uint8Array(ctx.getBuffer());
