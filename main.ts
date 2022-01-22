@@ -47,6 +47,9 @@ async function main() {
 
 	const listener = new Listener(detected, lost);
 
+
+	
+
 	// Main, infinite loop
 	while (true) {
 		const dt = 250; // fixed timestep
