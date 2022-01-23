@@ -17,8 +17,9 @@ interface ConnectionInfo extends DiscoveryMessage {
 interface Services {
 	StateMap: services.StateMap;
 	FileTransfer: services.FileTransfer;
+	BeatInfo: services.BeatInfo;
 }
-type SupportedTypes = services.StateMap | services.FileTransfer;
+type SupportedTypes = services.StateMap | services.FileTransfer | services.BeatInfo;
 
 interface SourceAndTrackPath {
 	source: string;
@@ -34,6 +35,7 @@ export class Controller {
 	private services: Services = {
 		StateMap: null,
 		FileTransfer: null,
+		BeatInfo: null,
 	};
 	private timeAlive: number = 0;
 	private connectedSources: {
