@@ -5,19 +5,19 @@ import { Service } from './Service';
 
 export interface BeatData {
 	clock: bigint;
-	countdownA: number;
-	countdownB: number;
-	startTimeA: number;
-	startTimeB: number;
-	trackLoadedA: number;
-	trackLoadedB: number;
-	zeroTimeA: number;
-	zeroTimeB: number;
-	playheadA: number;
-	playheadB: number;
+	playhead: Buffer;
+	countdown: Buffer;
+	startTime: Buffer;
+	trackLoaded: Buffer;
+	zeroTime: Buffer;
 }
 
 export class BeatInfo extends Service<BeatData> {
+	public headTimes = new Set<string>();
+	public headTimesArray = new Array<string>();
+	public playhead: number = null;
+	public prePlayhead: number = null;
+	
 	async init() {
 		
 	}
@@ -32,35 +32,37 @@ export class BeatInfo extends Service<BeatData> {
 		assert(p_ctx.sizeLeft() > 72);
 
 		let id = p_ctx.readUInt32()
-		
 		const clock = p_ctx.readUInt64();
 		p_ctx.seek(4);
-		const countdownA = p_ctx.readUInt32();
-		const countdownB = p_ctx.readUInt32();
-		const startTimeA = p_ctx.readUInt32();
-		const startTimeB = p_ctx.readUInt32();
-		const trackLoadedA = p_ctx.readUInt32();
-		const trackLoadedB = p_ctx.readUInt32();
+		const countdownBuf = p_ctx.read(8);
+		const startTimeBuf = p_ctx.read(8);
+		const trackLoadedBuf = p_ctx.read(8);	
 		p_ctx.seek(16);
-		const zeroTimeA = p_ctx.readUInt32();
-		const zeroTimeB = p_ctx.readUInt32();
-		const playheadA = p_ctx.readUInt32();
-		const playheadB = p_ctx.readUInt32();
+		const zeroTimeBuf = p_ctx.read(8);
+		const playheadBuf = p_ctx.read(8);
+	
 		
 		const dataFrame: BeatData = {	
 			clock: clock,
-			countdownA: countdownA,
-			countdownB: countdownB,
-			startTimeA: startTimeA,
-			startTimeB: startTimeB,
-			trackLoadedA: trackLoadedA,
-			trackLoadedB: trackLoadedB,
-			zeroTimeA: zeroTimeA,
-			zeroTimeB: zeroTimeB,
-			playheadA: playheadA,
-			playheadB: playheadB
+			playhead: Buffer.from(playheadBuf),
+			countdown: Buffer.from(countdownBuf),
+			startTime: Buffer.from(startTimeBuf),
+			trackLoaded: Buffer.from(trackLoadedBuf),
+			zeroTime: Buffer.from(zeroTimeBuf),
 		}
-		
+
+		/*
+		const playheadHexString = Buffer.from(playheadHex).toString('hex')
+		if (!this.headTimesArray.includes(playheadHexString)) {
+			this.headTimesArray.push(playheadHexString);
+		}
+		this.headTimes.add(Buffer.from(playheadHex).toString('hex'))
+
+		if (Number(playheadA) !== this.playhead){
+			this.prePlayhead = this.playhead;
+			this.playhead = Number(playheadA);
+		}
+		*/
 		return {
 			id: id,
 			message: dataFrame
@@ -68,6 +70,34 @@ export class BeatInfo extends Service<BeatData> {
 	}
 
 	protected messageHandler(p_data: ServiceMessage<BeatData>): void {
-		console.info(p_data.message.playheadA, p_data.message.playheadB, p_data.message.countdownA, p_data.message.countdownB);
+		console.clear();
+
+		const zeroTime = p_data.message.zeroTime.toString('hex');
+		const startTime = p_data.message.startTime.toString('hex');
+		const trackLoaded = p_data.message.trackLoaded.toString('hex');
+		const playhead = p_data.message.playhead.toString('hex');
+		const countdown = p_data.message.countdown.toString('hex');
+
+		let output = {
+			clock: Number(p_data.message.clock/(1000n*1000n*1000n)),
+			zeroTimeA: zeroTime.substring(0,8),
+			zeroTimeB: zeroTime.substring(8,16),
+			startTimeA: startTime.substring(0,8),
+			startTimeB: startTime.substring(8,16),
+			trackLoadedA: trackLoaded.substring(0,8),
+			trackLoadedB: startTime.substring(8,16),
+			playheadA: playhead.substring(0,8),
+			playheadB: playhead.substring(8,16),
+			countdownA: countdown.substring(0,8),
+			countdownB: countdown.substring(8,16),
+		}
+		/*
+		if (this.prePlayhead) {
+			console.log(this.playhead - this.prePlayhead);
+		} else {
+			console.log(this.playhead);
+		}	
+		*/	
+		console.table(output);
 	}
 }

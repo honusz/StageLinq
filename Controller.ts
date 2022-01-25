@@ -18,8 +18,9 @@ interface Services {
 	StateMap: services.StateMap;
 	FileTransfer: services.FileTransfer;
 	BeatInfo: services.BeatInfo;
+	TimeSynchronization: services.TimeSynchronization;
 }
-type SupportedTypes = services.StateMap | services.FileTransfer | services.BeatInfo;
+type SupportedTypes = services.StateMap | services.FileTransfer | services.BeatInfo | services.TimeSynchronization;
 
 interface SourceAndTrackPath {
 	source: string;
@@ -36,6 +37,7 @@ export class Controller {
 		StateMap: null,
 		FileTransfer: null,
 		BeatInfo: null,
+		TimeSynchronization: null,
 	};
 	private timeAlive: number = 0;
 	private connectedSources: {

@@ -1,7 +1,7 @@
 import { strict as assert } from 'assert';
 import { Controller } from './Controller';
 import { ConnectionInfo } from './Listener';
-import { BeatInfo, StateMap } from './services';
+import { BeatInfo, StateMap, TimeSynchronization } from './services';
 
 type ControllerList = {
 	[key: string]: Controller;
@@ -22,11 +22,14 @@ export class ControllerMgr {
 
 		// FIXME: Come up with some logic to have more control over which services I want to connect to for specific controllers
 		if (servicePorts.StateMap) {
-			await controller.connectToService(StateMap);
+			//await controller.connectToService(StateMap);
 		}
 		if (servicePorts.BeatInfo) {
 			const beatInfo = await controller.connectToService(BeatInfo);
 			beatInfo.sendBeatInfoRequest();
+		}
+		if (servicePorts.TimeSynchronization) {
+			//await controller.connectToService(TimeSynchronization);
 		}
 
 		// FIXME: Disabled for now
