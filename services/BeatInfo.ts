@@ -3,13 +3,17 @@ import { ReadContext } from '../utils/ReadContext';
 import { WriteContext } from '../utils/WriteContext';
 import { Service } from './Service';
 
+interface playerBeatData {
+	beat: Buffer;
+	totalBeats: Buffer; //former countdown
+	BPM: Buffer; //former startTime
+	samples?: Buffer;
+}
 export interface BeatData {
 	clock: bigint;
-	playhead: Buffer;
-	countdown: Buffer;
-	startTime: Buffer;
-	trackLoaded: Buffer;
-	zeroTime: Buffer;
+	player1: playerBeatData;
+	player2?: playerBeatData;
+	remaining?: Buffer;
 }
 
 export class BeatInfo extends Service<BeatData> {
@@ -34,35 +38,31 @@ export class BeatInfo extends Service<BeatData> {
 		let id = p_ctx.readUInt32()
 		const clock = p_ctx.readUInt64();
 		p_ctx.seek(4);
-		const countdownBuf = p_ctx.read(8);
-		const startTimeBuf = p_ctx.read(8);
-		const trackLoadedBuf = p_ctx.read(8);	
-		p_ctx.seek(16);
-		const zeroTimeBuf = p_ctx.read(8);
-		const playheadBuf = p_ctx.read(8);
-	
+		const beatBuf = p_ctx.read(8); //former countDownBuf
+		const totalBeatsBuf = p_ctx.read(8); //former startTimeBuf 
+		const BPMBuf = p_ctx.read(8); //former trackLoadedBuf	
+		const beatBuf2 = p_ctx.read(8); //former countDownBuf
+		const totalBeatsBuf2 = p_ctx.read(8); //former startTimeBuf 
+		const BPM2Buf2 = p_ctx.read(8); //former trackLoadedBuf	
+		const samplesBuf = p_ctx.read(8);
+		const samplesBuf2 = p_ctx.read(8);
 		
 		const dataFrame: BeatData = {	
 			clock: clock,
-			playhead: Buffer.from(playheadBuf),
-			countdown: Buffer.from(countdownBuf),
-			startTime: Buffer.from(startTimeBuf),
-			trackLoaded: Buffer.from(trackLoadedBuf),
-			zeroTime: Buffer.from(zeroTimeBuf),
+			player1: {
+				beat: Buffer.from(beatBuf),
+				totalBeats: Buffer.from(totalBeatsBuf),
+				BPM: Buffer.from(BPMBuf),
+				samples: Buffer.from(samplesBuf),
+			},
+			player2: {
+				beat: Buffer.from(beatBuf2),
+				totalBeats: Buffer.from(totalBeatsBuf2),
+				BPM: Buffer.from(BPM2Buf2),
+				samples: Buffer.from(samplesBuf2),
+			},
 		}
 
-		/*
-		const playheadHexString = Buffer.from(playheadHex).toString('hex')
-		if (!this.headTimesArray.includes(playheadHexString)) {
-			this.headTimesArray.push(playheadHexString);
-		}
-		this.headTimes.add(Buffer.from(playheadHex).toString('hex'))
-
-		if (Number(playheadA) !== this.playhead){
-			this.prePlayhead = this.playhead;
-			this.playhead = Number(playheadA);
-		}
-		*/
 		return {
 			id: id,
 			message: dataFrame
@@ -72,32 +72,26 @@ export class BeatInfo extends Service<BeatData> {
 	protected messageHandler(p_data: ServiceMessage<BeatData>): void {
 		console.clear();
 
-		const zeroTime = p_data.message.zeroTime.toString('hex');
-		const startTime = p_data.message.startTime.toString('hex');
-		const trackLoaded = p_data.message.trackLoaded.toString('hex');
-		const playhead = p_data.message.playhead.toString('hex');
-		const countdown = p_data.message.countdown.toString('hex');
-
+		const beatFloat = p_data.message.player1.beat.readDoubleBE();
+		const totalBeatsFloat = p_data.message.player1.totalBeats.readDoubleBE();
+		const BPMFloat = p_data.message.player1.BPM.readDoubleBE();;
+		const beatFloat2 = p_data.message.player2.beat.readDoubleBE();
+		const totalBeatsFloat2 = p_data.message.player2.totalBeats.readDoubleBE();
+		const BPMFloat2 = p_data.message.player2.BPM.readDoubleBE();
+		const samplesFloat = p_data.message.player1.samples.readDoubleBE();
+		const samplesFloat2 = p_data.message.player2.samples.readDoubleBE();
+		
 		let output = {
 			clock: Number(p_data.message.clock/(1000n*1000n*1000n)),
-			zeroTimeA: zeroTime.substring(0,8),
-			zeroTimeB: zeroTime.substring(8,16),
-			startTimeA: startTime.substring(0,8),
-			startTimeB: startTime.substring(8,16),
-			trackLoadedA: trackLoaded.substring(0,8),
-			trackLoadedB: startTime.substring(8,16),
-			playheadA: playhead.substring(0,8),
-			playheadB: playhead.substring(8,16),
-			countdownA: countdown.substring(0,8),
-			countdownB: countdown.substring(8,16),
+			beat: beatFloat,
+			totalBeats: totalBeatsFloat,
+			BPM: BPMFloat,
+			samples: samplesFloat / 44100,
+			beat2: beatFloat2,
+			totalBeats2: totalBeatsFloat2,
+			BPM2: BPMFloat2,
+			samples2: samplesFloat2 / 44100,
 		}
-		/*
-		if (this.prePlayhead) {
-			console.log(this.playhead - this.prePlayhead);
-		} else {
-			console.log(this.playhead);
-		}	
-		*/	
 		console.table(output);
 	}
 }

@@ -71,11 +71,30 @@ export interface StateData {
 		type: number;
 		string?: string;
 		value?: number;
+		state?: boolean;
 	};
 	interval?: number;
 }
 
+interface StateItem {
+	type: number;
+	string?: string;
+	value?: number;
+	state?: boolean;
+}
+
+enum StateType {
+	value = 0,
+	boolean = 1,
+	string = 8,
+	data = 3,
+}
+
 export class StateMap extends Service<StateData> {
+	private states: {
+		[key: string]: StateItem;
+	} = {};
+	
 	async init() {
 		for (const state of States) {
 			await this.subscribeState(state, 0);
@@ -120,11 +139,44 @@ export class StateMap extends Service<StateData> {
 	}
 
 	protected messageHandler(p_data: ServiceMessage<StateData>): void {
+		
+		if (p_data.message.json) {
+			const item: StateItem = {
+				type: p_data.message.json.type,
+			}
+			switch (item.type) {
+				case StateType.value:
+					item.value = p_data.message.json.value;
+				break;
+				case StateType.boolean:
+					item.state = p_data.message.json.state;
+				break;
+				case StateType.data:
+					//item.state = p_data.message.json.state;
+				break;	
+				case StateType.string:
+					item.string = p_data.message.json.string;
+				break;
+				default:
+					console.error(`Unhandled StateType '${item.type}'`);
+				break;
+			}
+			
+			this.states[this.getStateKey(p_data.message.name)] = item;
+			
+			const eventItem = {
+					[this.getStateKey(p_data.message.name)]: item
+				}
+			
+			this.emit('stateEvent', eventItem);
+			//console.table(this.states);
+		}
+		/*
 		console.log(
 			`${p_data.message.name} => ${
 				p_data.message.json ? JSON.stringify(p_data.message.json) : p_data.message.interval
 			}`
-		);
+		);*/
 
 		if (p_data.message.name.includes('TrackNetworkPath')) {
 			const path = this.controller.getAlbumArtPath(p_data.message.json.string);
@@ -146,6 +198,11 @@ export class StateMap extends Service<StateData> {
 				);
 			}
 		}
+
+	}
+
+	private getStateKey(p_state: string): string {
+		return Object.keys(StageLinqValue)[Object.values(StageLinqValue).indexOf(p_state as StageLinqValue)]
 	}
 
 	private async subscribeState(p_state: string, p_interval: number) {

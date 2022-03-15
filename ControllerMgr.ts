@@ -22,7 +22,10 @@ export class ControllerMgr {
 
 		// FIXME: Come up with some logic to have more control over which services I want to connect to for specific controllers
 		if (servicePorts.StateMap) {
-			//await controller.connectToService(StateMap);
+			const stateMap = await controller.connectToService(StateMap);
+			stateMap.on('stateEvent', data =>{
+				console.log('stateEvent: ', data)
+			});
 		}
 		if (servicePorts.BeatInfo) {
 			const beatInfo = await controller.connectToService(BeatInfo);
