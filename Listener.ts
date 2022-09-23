@@ -68,6 +68,7 @@ export class Listener {
 			if (
 				result === null ||
 				result.software.name === 'OfflineAnalyzer' ||
+				result.software.name.substring(0,1) === 'JM' ||
 				EXCLUDE_DEVICES.includes(result.source)
 			) {
 				return;
