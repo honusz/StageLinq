@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import { NetworkDevice } from '.';
 import { Player } from '../devices/Player';
 import { sleep } from '../utils';
-import { FileTransfer, StateData, StateMap } from '../services';
+import { FileTransfer, StateData, StateMap, BeatInfo } from '../services';
 import { Logger } from '../LogEmitter';
 import { Databases } from '../Databases';
 
@@ -137,6 +137,7 @@ export class StageLinqDevices extends EventEmitter {
 
         Logger.debug(`Database download complete for ${connectionInfo.source}`);
         this.discoveryStatus.set(this.deviceId(connectionInfo), ConnectionStatus.CONNECTED);
+        
         this.emit('connected', connectionInfo);
         return; // Don't forget to return!
       } catch(e) {
@@ -179,6 +180,9 @@ export class StageLinqDevices extends EventEmitter {
 
     // Append to the list of states we need to setup later.
     this.stateMapCallback.push({ connectionInfo, networkDevice });
+    const beatInfo = await networkDevice.connectToService(BeatInfo);
+    beatInfo.sendBeatInfoRequest();
+
   }
 
   private sourceId(connectionInfo: ConnectionInfo) {

@@ -15,6 +15,8 @@ export enum MessageId {
   ServicesAnnouncement = 0x0,
   TimeStamp = 0x1,
   ServicesRequest = 0x2,
+  BeatInfoRequest = 0x4,
+	BeatInfoMsg = 0x50,
 }
 
 export enum StageLinqValue {
