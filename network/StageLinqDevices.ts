@@ -29,8 +29,6 @@ export declare interface StageLinqDevices {
 
 //////////////////////////////////////////////////////////////////////////////
 
-// TODO: Refactor device, listener, and player into something more nicer.
-
 /**
  * Handle connecting and disconnecting from discovered devices on the
  * StageLinq network.
@@ -95,6 +93,25 @@ export class StageLinqDevices extends EventEmitter {
   /**
    * Waits for all devices to be connected with databases downloaded
    * then connects to the StateMap.
+   *
+   * Explained:
+   *
+   * Why wait for all devices? Because a race condition exists when using the
+   * database methods.
+   *
+   * If there are two SC6000 players on the network both will be sending
+   * broadcast packets and so their StateMap can be initialized at any time
+   * in any order.
+   *
+   * Assume you have player 1 and player 2 linked. Player 2 has a track that
+   * is loaded from a USB drive plugged into player 1. Player 2 will be
+   * ready before Player 1 because Player 1 will still be downloading a large
+   * database. The race condition is if you try to read from the database on
+   * the track that is plugged into Player 1 that isn't ready yet.
+   *
+   * This method prevents that by waiting for both players to connect and
+   * have their databases loaded before initializing the StateMap.
+   *
    */
   private waitForAllDevices() {
     Logger.log('Start watching for devices ...');
@@ -127,18 +144,43 @@ export class StageLinqDevices extends EventEmitter {
    * @returns
    */
   private async connectToDevice(connectionInfo: ConnectionInfo) {
+
+    // Mark this device as connecting.
     this.discoveryStatus.set(this.deviceId(connectionInfo), ConnectionStatus.CONNECTING);
+
     let attempt = 1;
     while (attempt < this.options.maxRetries) {
       try {
+
+        // Connect to the device.
         Logger.info(`Connecting to ${this.deviceId(connectionInfo)}. ` +
           `Attempt ${attempt}/${this.options.maxRetries}`);
-        await this.downloadDatabase(connectionInfo);
+        const networkDevice = new NetworkDevice(connectionInfo);
+        await networkDevice.connect();
 
-        Logger.debug(`Database download complete for ${connectionInfo.source}`);
+        // Setup file transfer service
+        await this.setupFileTransferService(networkDevice, connectionInfo);
+
+        // Download the database
+        if (this.options.downloadDbSources) {
+          await this.downloadDatabase(networkDevice, connectionInfo);
+        }
+
+        // Setup other services that should be initialized before StateMap here.
+
+        // StateMap will be initialized after all devices have completed
+        // this method. In other words, StateMap will initialize
+        // after all entries in this.discoveryStatus return
+        // ConnectionStatus.CONNECTED
+
+        // Append to the list of states we need to setup later.
+        this.stateMapCallback.push({ connectionInfo, networkDevice });
+
+        // Mark this device as connected.
         this.discoveryStatus.set(this.deviceId(connectionInfo), ConnectionStatus.CONNECTED);
         
         this.emit('connected', connectionInfo);
+
         return; // Don't forget to return!
       } catch(e) {
 
@@ -154,16 +196,7 @@ export class StageLinqDevices extends EventEmitter {
     throw new Error(`Could not connect to ${this.deviceId(connectionInfo)}`);
   }
 
-  /**
-   * Download databases from the device.
-   *
-   * @param connectionInfo Connection info
-   * @returns
-   */
-  private async downloadDatabase(connectionInfo: ConnectionInfo) {
-    const networkDevice = new NetworkDevice(connectionInfo);
-    await networkDevice.connect();
-
+  private async setupFileTransferService(networkDevice: NetworkDevice, connectionInfo: ConnectionInfo) {
     const sourceId = this.sourceId(connectionInfo);
     Logger.info(`Starting file transfer for ${this.deviceId(connectionInfo)}`);
     const fileTransfer = await networkDevice.connectToService(FileTransfer);
@@ -173,16 +206,16 @@ export class StageLinqDevices extends EventEmitter {
       fileTransferService: fileTransfer
     });
 
-    if (this.options.downloadDbSources) {
-      const sources = await this.databases.downloadSourcesFromDevice(connectionInfo, networkDevice);
-      Logger.debug(`Database sources: ${sources.join(', ')}`);
-    }
-
-    // Append to the list of states we need to setup later.
-    this.stateMapCallback.push({ connectionInfo, networkDevice });
-    const beatInfo = await networkDevice.connectToService(BeatInfo);
-    beatInfo.sendBeatInfoRequest();
-
+  /**
+   * Download databases from the device.
+   *
+   * @param connectionInfo Connection info
+   * @returns
+   */
+  private async downloadDatabase(networkDevice: NetworkDevice, connectionInfo: ConnectionInfo) {
+    const sources = await this.databases.downloadSourcesFromDevice(connectionInfo, networkDevice);
+    Logger.debug(`Database sources: ${sources.join(', ')}`);
+    Logger.debug(`Database download complete for ${connectionInfo.source}`);
   }
 
   private sourceId(connectionInfo: ConnectionInfo) {
@@ -192,6 +225,7 @@ export class StageLinqDevices extends EventEmitter {
 
   /**
    * Setup stateMap.
+   *
    * @param connectionInfo Connection info
    * @param networkDevice Network device
    */
