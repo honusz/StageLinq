@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import { NetworkDevice } from '.';
 import { Player } from '../devices/Player';
 import { sleep } from '../utils';
-import { FileTransfer, StateData, StateMap, BeatInfo } from '../services';
+import { FileTransfer, StateData, StateMap, BeatInfo, BeatData } from '../services';
 import { Logger } from '../LogEmitter';
 import { Databases } from '../Databases';
 
@@ -25,6 +25,7 @@ export declare interface StageLinqDevices {
   on(event: 'connected', listener: (connectionInfo: ConnectionInfo) => void): this;
   on(event: 'message', listener: (connectionInfo: ConnectionInfo, message: ServiceMessage<StateData>) => void): this;
   on(event: 'ready', listener: () => void): this;
+  on(event: 'onBeatMsg', listener: (message: ServiceMessage<BeatData>) => void): this;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -36,6 +37,7 @@ export declare interface StageLinqDevices {
 export class StageLinqDevices extends EventEmitter {
 
   private _databases: Databases;
+  private _beatinfo: BeatInfo;
   private devices: Map<IpAddress, StageLinqDevice> = new Map();
   private discoveryStatus: Map<string, ConnectionStatus> = new Map();
   private options: StageLinqOptions;
@@ -80,6 +82,10 @@ export class StageLinqDevices extends EventEmitter {
 
   get databases() {
     return this._databases;
+  }
+
+  get beatinfo() {
+    return this._beatinfo;
   }
 
   async downloadFile(deviceId: string, path: string) {
@@ -130,7 +136,9 @@ export class StageLinqDevices extends EventEmitter {
         for (const cb of this.stateMapCallback) {
           this.setupStateMap(cb.connectionInfo, cb.networkDevice);
         }
+      
         this.emit('ready');
+
       } else {
         Logger.log(`Waiting for devices ...`);
       }
@@ -172,7 +180,12 @@ export class StageLinqDevices extends EventEmitter {
         // this method. In other words, StateMap will initialize
         // after all entries in this.discoveryStatus return
         // ConnectionStatus.CONNECTED
-
+        const beatInfo = await networkDevice.connectToService(BeatInfo);
+        beatInfo.sendBeatInfoRequest();
+        beatInfo.on('message', (data) => {
+          //Logger.debug("Beat Data: ", data)
+          this.emit('onBeatMsg', data)
+        });
         // Append to the list of states we need to setup later.
         this.stateMapCallback.push({ connectionInfo, networkDevice });
 
@@ -205,7 +218,7 @@ export class StageLinqDevices extends EventEmitter {
       networkDevice: networkDevice,
       fileTransferService: fileTransfer
     });
-
+  }
   /**
    * Download databases from the device.
    *

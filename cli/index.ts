@@ -6,9 +6,37 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { BeatData } from '../services';
+
 require('console-stamp')(console, {
   format: ':date(HH:MM:ss) :label',
 });
+
+class beat {
+  private _beatCount: number = 0.0//beatCountData;
+  
+  public async newBeatMsg (msg: BeatData) {
+    //let thisBeatCount:number = this.beatCount
+    
+    if ((this.beatCount - Math.floor(msg.player1.beat)) >= 2) {
+      this.beatCount = 0;
+    }
+    if (Math.floor(msg.player1.beat) > this.beatCount) {
+      this.beatCount = Math.floor(msg.player1.beat);
+      console.debug(`${this.beatCount}: [[[[BOOM]]]] `);
+    } else {
+      console.debug(`-----------`);
+    }
+  };
+
+  get beatCount(): number {
+    return this._beatCount;
+  }
+
+  set beatCount(_beat: number){
+    this._beatCount = _beat
+  }
+}
 
 /**
  * Get track information for latest playing song.
@@ -149,6 +177,12 @@ async function main() {
   // Fires when the state of a device has changed.
   stageLinq.devices.on('stateChanged', (status) => {
     console.log(`Updating state [${status.deck}]`, status)
+  });
+
+  const beatCounter = new beat;
+  stageLinq.devices.on('onBeatMsg', (beatMsg) => {
+    //console.debug('beatMsg: ', beatMsg.message);
+    beatCounter.newBeatMsg(beatMsg.message);
   });
 
   /////////////////////////////////////////////////////////////////////////

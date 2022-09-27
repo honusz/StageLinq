@@ -2,21 +2,33 @@ import { strict as assert } from 'assert';
 import { ReadContext } from '../utils/ReadContext';
 import { WriteContext } from '../utils/WriteContext';
 import { Service } from './Service';
-import { Logger } from '../LogEmitter';
+//import { Logger } from '../LogEmitter';
 import type { ServiceMessage } from '../types';
 
-interface playerBeatData {
+/*interface playerBeatData {
 	beat: Buffer;
 	totalBeats: Buffer; //former countdown
 	BPM: Buffer; //former startTime
 	samples?: Buffer;
 }
+*/
+
+interface playerBeatData {
+	beat: number;
+	totalBeats: number; //former countdown
+	BPM: number; //former startTime
+	samples?: number;
+}
 export interface BeatData {
-	clock: bigint;
+	clock: number;//bigint;
 	player1: playerBeatData;
 	player2?: playerBeatData;
 	remaining?: Buffer;
 }
+
+export declare interface BeatInfo {
+    on(event: 'message', listener: (message: BeatData) => void): this;
+  }
 
 export class BeatInfo extends Service<BeatData> {
 	public headTimes = new Set<string>();
@@ -49,7 +61,23 @@ export class BeatInfo extends Service<BeatData> {
 		const samplesBuf = p_ctx.read(8);
 		const samplesBuf2 = p_ctx.read(8);
 		
-		const dataFrame: BeatData = {	
+        const dataFrame: BeatData = {	
+			clock: Number(clock/(1000n*1000n*1000n)),
+			player1: {
+				beat: Buffer.from(beatBuf).readDoubleBE(),
+				totalBeats: Buffer.from(totalBeatsBuf).readDoubleBE(),
+				BPM: Buffer.from(BPMBuf).readDoubleBE(),
+				samples: Buffer.from(samplesBuf).readDoubleBE(),
+			},
+			player2: {
+				beat: Buffer.from(beatBuf2).readDoubleBE(),
+				totalBeats: Buffer.from(totalBeatsBuf2).readDoubleBE(),
+				BPM: Buffer.from(BPM2Buf2).readDoubleBE(),
+				samples: Buffer.from(samplesBuf2).readDoubleBE(),
+			},
+		}
+		/*
+        const dataFrame: BeatData = {	
 			clock: clock,
 			player1: {
 				beat: Buffer.from(beatBuf),
@@ -64,6 +92,7 @@ export class BeatInfo extends Service<BeatData> {
 				samples: Buffer.from(samplesBuf2),
 			},
 		}
+        */
 
 		return {
 			id: id,
@@ -71,8 +100,9 @@ export class BeatInfo extends Service<BeatData> {
 		}
 	}
 
-	protected messageHandler(p_data: ServiceMessage<BeatData>): void {
-		console.clear();
+	protected messageHandler(_: ServiceMessage<BeatData>): void {
+		/*
+        console.clear();
 
 		const beatFloat = p_data.message.player1.beat.readDoubleBE();
 		const totalBeatsFloat = p_data.message.player1.totalBeats.readDoubleBE();
@@ -95,5 +125,7 @@ export class BeatInfo extends Service<BeatData> {
 			samples2: samplesFloat2 / 44100,
 		}
 		console.table(output);
+        //this.emit('')
+        */
 	}
 }
