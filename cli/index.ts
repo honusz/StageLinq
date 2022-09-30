@@ -13,17 +13,18 @@ require('console-stamp')(console, {
 });
 
 class beat {
-  private _beatCount: number = 0.0//beatCountData;
+  private _beatCount: number = 0.0;
+  private _currentBeat: number;
   
   public async newBeatMsg (msg: BeatData) {
     //let thisBeatCount:number = this.beatCount
     
-    if ((this.beatCount - Math.floor(msg.player1.beat)) >= 2) {
+    if ((this.beatCount - Math.floor(msg.player[0].beat)) >= 2) {
       this.beatCount = 0;
     }
-    if (Math.floor(msg.player1.beat) > this.beatCount) {
-      this.beatCount = Math.floor(msg.player1.beat);
-      console.debug(`${this.beatCount}: [[[[BOOM]]]] `);
+    if (Math.floor(msg.player[0].beat) !== this._currentBeat) {
+      this._currentBeat = Math.floor(msg.player[0].beat);
+      console.debug(`${this._currentBeat}: [[[[BOOM]]]] `);
     } else {
       console.debug(`-----------`);
     }
@@ -182,7 +183,7 @@ async function main() {
   const beatCounter = new beat;
   stageLinq.devices.on('onBeatMsg', (beatMsg) => {
     //console.debug('beatMsg: ', beatMsg.message);
-    beatCounter.newBeatMsg(beatMsg.message);
+    //beatCounter.newBeatMsg(beatMsg.message);
   });
 
   /////////////////////////////////////////////////////////////////////////

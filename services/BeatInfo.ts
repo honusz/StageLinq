@@ -5,25 +5,17 @@ import { Service } from './Service';
 //import { Logger } from '../LogEmitter';
 import type { ServiceMessage } from '../types';
 
-/*interface playerBeatData {
-	beat: Buffer;
-	totalBeats: Buffer; //former countdown
-	BPM: Buffer; //former startTime
-	samples?: Buffer;
-}
-*/
 
 interface playerBeatData {
 	beat: number;
-	totalBeats: number; //former countdown
-	BPM: number; //former startTime
+	totalBeats: number; 
+	BPM: number; 
 	samples?: number;
 }
 export interface BeatData {
-	clock: number;//bigint;
-	player1: playerBeatData;
-	player2?: playerBeatData;
-	remaining?: Buffer;
+	clock: bigint;
+	playerCount: number;
+	player: playerBeatData[];
 }
 
 export declare interface BeatInfo {
@@ -48,84 +40,36 @@ export class BeatInfo extends Service<BeatData> {
 
 	protected parseData(p_ctx: ReadContext): ServiceMessage<BeatData> {
 		assert(p_ctx.sizeLeft() > 72);
-
 		let id = p_ctx.readUInt32()
 		const clock = p_ctx.readUInt64();
-		p_ctx.seek(4);
-		const beatBuf = p_ctx.read(8); //former countDownBuf
-		const totalBeatsBuf = p_ctx.read(8); //former startTimeBuf 
-		const BPMBuf = p_ctx.read(8); //former trackLoadedBuf	
-		const beatBuf2 = p_ctx.read(8); //former countDownBuf
-		const totalBeatsBuf2 = p_ctx.read(8); //former startTimeBuf 
-		const BPM2Buf2 = p_ctx.read(8); //former trackLoadedBuf	
-		const samplesBuf = p_ctx.read(8);
-		const samplesBuf2 = p_ctx.read(8);
-		
-        const dataFrame: BeatData = {	
-			clock: Number(clock/(1000n*1000n*1000n)),
-			player1: {
-				beat: Buffer.from(beatBuf).readDoubleBE(),
-				totalBeats: Buffer.from(totalBeatsBuf).readDoubleBE(),
-				BPM: Buffer.from(BPMBuf).readDoubleBE(),
-				samples: Buffer.from(samplesBuf).readDoubleBE(),
-			},
-			player2: {
-				beat: Buffer.from(beatBuf2).readDoubleBE(),
-				totalBeats: Buffer.from(totalBeatsBuf2).readDoubleBE(),
-				BPM: Buffer.from(BPM2Buf2).readDoubleBE(),
-				samples: Buffer.from(samplesBuf2).readDoubleBE(),
-			},
+		const playerCount = p_ctx.readUInt32();
+		let player: playerBeatData[] = [];
+		for (let i=0; i<playerCount; i++) {
+			let playerData:playerBeatData = {
+				beat: p_ctx.readFloat64(),
+				totalBeats: p_ctx.readFloat64(),
+				BPM: p_ctx.readFloat64(),
+			}
+			player.push(playerData);
 		}
-		/*
-        const dataFrame: BeatData = {	
+		for (let i=0; i<playerCount; i++) {
+			player[i].samples = p_ctx.readFloat64();
+		}
+		assert(p_ctx.isEOF())
+		const beatMsg = {
 			clock: clock,
-			player1: {
-				beat: Buffer.from(beatBuf),
-				totalBeats: Buffer.from(totalBeatsBuf),
-				BPM: Buffer.from(BPMBuf),
-				samples: Buffer.from(samplesBuf),
-			},
-			player2: {
-				beat: Buffer.from(beatBuf2),
-				totalBeats: Buffer.from(totalBeatsBuf2),
-				BPM: Buffer.from(BPM2Buf2),
-				samples: Buffer.from(samplesBuf2),
-			},
+			playerCount: playerCount,
+			player: player,
 		}
-        */
-
 		return {
 			id: id,
-			message: dataFrame
+			message: beatMsg
 		}
 	}
 
-	protected messageHandler(_: ServiceMessage<BeatData>): void {
-		/*
+	protected messageHandler(p_data: ServiceMessage<BeatData>): void {
         console.clear();
-
-		const beatFloat = p_data.message.player1.beat.readDoubleBE();
-		const totalBeatsFloat = p_data.message.player1.totalBeats.readDoubleBE();
-		const BPMFloat = p_data.message.player1.BPM.readDoubleBE();;
-		const beatFloat2 = p_data.message.player2.beat.readDoubleBE();
-		const totalBeatsFloat2 = p_data.message.player2.totalBeats.readDoubleBE();
-		const BPMFloat2 = p_data.message.player2.BPM.readDoubleBE();
-		const samplesFloat = p_data.message.player1.samples.readDoubleBE();
-		const samplesFloat2 = p_data.message.player2.samples.readDoubleBE();
-		
-		let output = {
-			clock: Number(p_data.message.clock/(1000n*1000n*1000n)),
-			beat: beatFloat,
-			totalBeats: totalBeatsFloat,
-			BPM: BPMFloat,
-			samples: samplesFloat / 44100,
-			beat2: beatFloat2,
-			totalBeats2: totalBeatsFloat2,
-			BPM2: BPMFloat2,
-			samples2: samplesFloat2 / 44100,
-		}
-		console.table(output);
-        //this.emit('')
-        */
+		console.table(p_data.message.player[0]);
+       
 	}
 }
