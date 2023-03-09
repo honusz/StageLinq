@@ -180,12 +180,38 @@ export class StageLinqDevices extends EventEmitter {
         // this method. In other words, StateMap will initialize
         // after all entries in this.discoveryStatus return
         // ConnectionStatus.CONNECTED
+       
+        
+        //////////   BEATINFO  ////////////////
+
+        // Just a counter to test resolution
+        let beatCalls: number = 0; 
+        
+        //  User callback function. 
+        //  Will be triggered everytime a player's beat counter crosses the resolution threshold
+        function beatCallback(bd: BeatData) {
+          let playerBeatString = ""
+          for (let i=0; i<bd.playerCount; i++) {
+            playerBeatString += `Player: ${i+1} Beat: ${bd.player[i].beat.toFixed(3)} `
+          }
+          console.warn(`Total Calls ${beatCalls} ${playerBeatString}`);
+          beatCalls++
+        }
+
+        //  User Options
+        const beatOptions = {
+          everyNBeats: 1, // 1 = every beat, 4 = every 4 beats, .25 = every 1/4 beat
+        }
+        
+        //  Connect to BeatInfo service
         const beatInfo = await networkDevice.connectToService(BeatInfo);
-        beatInfo.sendBeatInfoRequest();
-        beatInfo.on('message', (data) => {
-          //Logger.debug("Beat Data: ", data)
-          this.emit('onBeatMsg', data)
-        });
+        
+        //  Start BeatInfo, pass user callback
+        beatInfo.startBeatInfo(beatCallback, beatOptions);
+        
+        
+
+
         // Append to the list of states we need to setup later.
         this.stateMapCallback.push({ connectionInfo, networkDevice });
 

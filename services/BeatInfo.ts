@@ -6,6 +6,12 @@ import { Service } from './Service';
 import type { ServiceMessage } from '../types';
 
 
+type beatCallback = (n: BeatData) => void;
+
+type BeatOptions = {
+	everyNBeats: number,
+}
+
 interface playerBeatData {
 	beat: number;
 	totalBeats: number; 
@@ -23,16 +29,19 @@ export declare interface BeatInfo {
   }
 
 export class BeatInfo extends Service<BeatData> {
-	public headTimes = new Set<string>();
-	public headTimesArray = new Array<string>();
-	public playhead: number = null;
-	public prePlayhead: number = null;
+	private _userBeatCallback: beatCallback = null;
+	private _userBeatOptions: BeatOptions = null;
+	private _currentBeatData: BeatData = null;
 	
-	async init() {
-		
+	async init() {}
+
+	public startBeatInfo(beatCB: beatCallback, options: BeatOptions) {
+		this._userBeatCallback = beatCB;
+		this._userBeatOptions = options;
+		this.sendBeatInfoRequest();
 	}
 
-	public async sendBeatInfoRequest() {
+	private async sendBeatInfoRequest() {
 		const ctx = new WriteContext();
 		ctx.write(new Uint8Array([0x0,0x0,0x0,0x4,0x0,0x0,0x0,0x0]))
 		await this.write(ctx);
@@ -68,8 +77,27 @@ export class BeatInfo extends Service<BeatData> {
 	}
 
 	protected messageHandler(p_data: ServiceMessage<BeatData>): void {
-        console.clear();
-		console.table(p_data.message.player[0]);
-       
+        
+		function resCheck(res: number, prevBeat: number, currentBeat: number ) {
+			return (( Math.floor(currentBeat/res) - Math.floor(prevBeat/res)  >= 1) || (  Math.floor(prevBeat/res) - Math.floor(currentBeat/res)   >= 1))
+		}
+
+		if (!this._currentBeatData) {
+			this._currentBeatData = p_data.message
+			this._userBeatCallback(p_data.message);
+		} 
+
+		let hasUpdated = false;
+
+		for (let i = 0; i<p_data.message.playerCount; i++) {
+			if (resCheck(this._userBeatOptions.everyNBeats, this._currentBeatData.player[i].beat, p_data.message.player[i].beat)) {
+				hasUpdated = true;
+			}
+		}
+
+		if (hasUpdated) {
+			this._currentBeatData = p_data.message;
+			this._userBeatCallback(p_data.message);
+		}
 	}
 }

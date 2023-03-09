@@ -6,38 +6,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { BeatData } from '../services';
+
 
 require('console-stamp')(console, {
   format: ':date(HH:MM:ss) :label',
 });
-
-class beat {
-  private _beatCount: number = 0.0;
-  private _currentBeat: number;
-  
-  public async newBeatMsg (msg: BeatData) {
-    //let thisBeatCount:number = this.beatCount
-    
-    if ((this.beatCount - Math.floor(msg.player[0].beat)) >= 2) {
-      this.beatCount = 0;
-    }
-    if (Math.floor(msg.player[0].beat) !== this._currentBeat) {
-      this._currentBeat = Math.floor(msg.player[0].beat);
-      console.debug(`${this._currentBeat}: [[[[BOOM]]]] `);
-    } else {
-      console.debug(`-----------`);
-    }
-  };
-
-  get beatCount(): number {
-    return this._beatCount;
-  }
-
-  set beatCount(_beat: number){
-    this._beatCount = _beat
-  }
-}
 
 /**
  * Get track information for latest playing song.
@@ -113,7 +86,7 @@ async function main() {
     console.log(...args);
   });
   stageLinq.logger.on('debug', (...args: any) => {
-    console.debug(...args);
+    //console.debug(...args);
   });
   // Note: Silly is very verbose!
   // stageLinq.logger.on('silly', (...args: any) => {
@@ -158,12 +131,12 @@ async function main() {
     }
 
     // Example of how to download the actual track from the media.
-    await downloadFile(stageLinq, status, path.resolve(os.tmpdir(), 'media'));
+    //await downloadFile(stageLinq, status, path.resolve(os.tmpdir(), 'media'));
   });
 
   // Fires when a track has started playing.
   stageLinq.devices.on('nowPlaying', (status) => {
-    console.log(`Now Playing on [${status.deck}]: ${status.title} - ${status.artist}`)
+    //console.log(`Now Playing on [${status.deck}]: ${status.title} - ${status.artist}`)
   });
 
   // Fires when StageLinq receives messages from a device.
@@ -171,20 +144,16 @@ async function main() {
     const msg = data.message.json
       ? JSON.stringify(data.message.json)
       : data.message.interval;
-    console.debug(`${connectionInfo.address}:${connectionInfo.port} ` +
-      `${data.message.name} => ${msg}`);
+    //console.debug(`${connectionInfo.address}:${connectionInfo.port} ` +
+    //  `${data.message.name} => ${msg}`);
   });
 
   // Fires when the state of a device has changed.
   stageLinq.devices.on('stateChanged', (status) => {
-    console.log(`Updating state [${status.deck}]`, status)
+    //console.log(`Updating state [${status.deck}]`, status)
   });
 
-  const beatCounter = new beat;
-  stageLinq.devices.on('onBeatMsg', (beatMsg) => {
-    //console.debug('beatMsg: ', beatMsg.message);
-    //beatCounter.newBeatMsg(beatMsg.message);
-  });
+  
 
   /////////////////////////////////////////////////////////////////////////
   // CLI
