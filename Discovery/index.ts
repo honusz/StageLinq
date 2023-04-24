@@ -199,7 +199,7 @@ export class Discovery extends EventEmitter {
 	}
 
 	/**
-	 *
+	 *Discovery Message Writer
 	 * @param {DiscoveryMessage} message
 	 * @returns {Buffer}
 	 */
@@ -217,7 +217,7 @@ export class Discovery extends EventEmitter {
 
 	/**
 	 * Get list of Broadcast-enabled Network Interfaces
-	 * @returns {SubnetInfo[]}
+	 * @returns {SubnetInfo[]} Array of Broadcast IPs
 	 */
 	private findBroadcastIPs(): string[] {
 		const interfaces = Object.values(networkInterfaces());

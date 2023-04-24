@@ -1,15 +1,16 @@
 # StageLinqJS  - A Robust Implementation of StageLinq Library
 
 ## Description
-This branch implements the methods demonstrated previously in the StageLinq Listener branch.
-Rather than searching out devices via discovery, we are able to have devices initiate connections to the library. As demonstrated, this approach:
+NodeJS library implementation to access information through the Denon StageLinq protocol.
+
+From Version 2.0.0, the library now implements new connection methods. Rather than searching out devices via discovery, we are able to have devices initiate connections to the library. This approach:
 * Greatly reduces complexity. 
 
-* Speeds up the connection & initialization process (almost every sleep() call has been eliminated without and affect thus far).
+* Speeds up the connection & initialization process.
 
 * Handles disconnection and reconnection of devices gracefully and simply.
 
-* Allows connections from devices we couldn't use previously (i.e. x1800/x1850 mixers).
+* Allows connections from devices that couldn't be used previously (i.e. x1800/x1850 mixers).
 
 ## Notes on Terminilogy
 
@@ -44,18 +45,18 @@ const stageLinqOptions: StageLinqOptions = {
     Services.StateMap,
     Services.BeatInfo,
     Services.FileTransfer,
+    Services.Broadcast,
   ],
 }
 ```
 
 ## Starting StageLinq
 
-The main StageLinq class is now a Static Class:
 ```ts
-StageLinq.options = stageLinqOptions;
+const stageLinq = new StageLinq(stageLinqOptions);
 
-await StageLinq.connect();
-await StageLinq.disconnect();
+await stageLinq.connect();
+await stageLinq.disconnect();
 ```
 
 
@@ -79,37 +80,6 @@ StageLinq.discovery.on('updatedDiscoveryDevice', (info) => {
   console.log(`[DISCOVERY] Updated Device ${info.deviceId.string} Port:${info.port} ${info.source} ${info.software.name} ${info.software.version}`)
 });
 ```
-
-`updatedDiscoveryDevice` is emitted when a Device is broadcasting a new Directory port, which is indicative of a reset. The Device should automatically reconnect without any action required from the user.
-
-Discovery offers a few methods for getting ConnectionInfos for Devices on the network:
-```ts
-/**
- * Get ConnectionInfo
- * @param {DeviceId} deviceId 
- * @returns {ConnectionInfo}
- */
-public getConnectionInfo(deviceId: DeviceId): ConnectionInfo {
-    return this.peers.get(deviceId.string);
-}
-
-/**
- * Get list of devices
- * @returns {string[]} An array of DeviceId strings
- */
-public getDeviceList(): string[] {
-    return [...this.peers.keys()]
-}
-
-/**
- * Get array of device ConnectionInfos
- * @returns {ConnectionInfo[]} An array of ConnectionInfos
- */
-public getDevices(): ConnectionInfo[] {
-    return [...this.peers.values()]
-}
-```
-
 
 
 ## StateMap
@@ -251,9 +221,10 @@ BeatInfo.emitter.on('newBeatInfoDevice', async (beatInfo: BeatInfo) => {
 
 ```
 
+## About
 
-## Additional Notes on the Listener Method
+Forked from @MarByteBeep's code.
 
-* The Directory service is the only one which is *required* as it is the initial connection endpoint for remote devices.
+Additional reverse engineering work: https://github.com/chrisle/stagelinq-pcap
 
-* Only tokens of a specific structure seem to work, otherwise devices won't initiate a connection. One requirement *seems* to be that they start with `0xFFFFFFFFFFFF`, but some more research into this is needed.
+Used in Now Playing https://www.nowplaying2.com
