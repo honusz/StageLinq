@@ -125,12 +125,196 @@ export class FileTransfer extends Service<FileTransferData> {
 
 		const txId = ctx.readUInt32();
 
-		const length = ctx.sizeLeft();
-		const buf = ctx.readRemainingAsNewArrayBuffer();
-		ctx.seek(0 - length);
-		if (txId > 0) this.emit(txId.toString(), buf)
-
 		const messageId: MessageId = ctx.readUInt32();
+
+		if (txId > 0) {
+			this.emit(txId.toString(), messageId, ctx.readRemainingAsNewArrayBuffer())
+		} else {
+			switch (messageId) {
+				case MessageId.RequestSources: {
+					assert(ctx.readUInt32() === 0x0)
+					assert(ctx.isEOF());
+
+					const message = {
+						id: MessageId.RequestSources,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+						},
+					};
+					this.emit(`message`, message);
+					return message
+				}
+
+				case MessageId.DirResponse: {
+					const sources: string[] = [];
+					const sourceCount = ctx.readUInt32();
+					for (let i = 0; i < sourceCount; ++i) {
+						// We get a location
+						const location = ctx.readNetworkStringUTF16();
+						sources.push(location);
+					}
+
+
+					assert(ctx.isEOF());
+
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+							sources: sources,
+							//statFlags: statFlags,
+						},
+					};
+					//console.warn(message.message.sources, message.message.signOff)
+					this.emit(`message`, message);
+					return message
+				}
+
+				case MessageId.FileStat: {
+					assert(ctx.sizeLeft() === 53);
+					// Last 4 bytes (FAT32) indicate size of file
+					ctx.seek(49)
+					const size = ctx.readUInt32();
+
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+							size: size,
+						},
+					};
+					this.emit(`message`, message);
+					return message
+				}
+
+				case MessageId.EndOfMessage: {
+					// End of result indication?
+					const data = ctx.readRemainingAsNewBuffer();
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+						},
+					};
+					console.warn(`end of message ${this.deviceId.string} ${txId} `, data)
+					this.emit(`message`, message);
+					return message
+				}
+
+				case MessageId.FileTransferId: {
+					assert(ctx.sizeLeft() === 12);
+					assert(ctx.readUInt32() === 0x0);
+					const filesize = ctx.readUInt32();
+					const id = ctx.readUInt32();
+					assert(id === 1)
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+							size: filesize,
+						},
+					};
+					this.emit(`message`, message);
+					return message
+				}
+
+				case MessageId.FileTransferChunk: {
+					assert(ctx.readUInt32() === 0x0);
+					const offset = ctx.readUInt32();
+					const chunksize = ctx.readUInt32();
+					assert(chunksize === ctx.sizeLeft());
+					assert(ctx.sizeLeft() <= CHUNK_SIZE);
+
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+							data: ctx.readRemainingAsNewBuffer(),
+							offset: offset,
+							size: chunksize,
+						},
+					};
+					this.emit(`message`, message);
+					return message
+				}
+
+				case MessageId.DataUpdate: {
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+							data: ctx.readRemainingAsNewBuffer(),
+						},
+					};
+					this.emit(`message`, message);
+					return message
+				}
+
+				case MessageId.Unknown0: {
+					// sizeLeft() of 6 means its not an offline analyzer
+					// TODO name Unknown0 and finalize this
+					this.dirRequest('/DJ2 (USB 1)/');
+
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+							data: ctx.readRemainingAsNewBuffer(),
+						},
+					};
+					this.emit(`message`, message);
+					console.info(this.deviceId.string, message.message.txid, message.message.data)
+					return message
+				}
+
+				case MessageId.DeviceShutdown: {
+					// This message seems to be sent from connected devices when shutdown is started
+					if (ctx.sizeLeft() > 0) {
+						const msg = ctx.readRemainingAsNewBuffer().toString('hex');
+						Logger.debug(msg)
+					}
+
+					const message = {
+						id: messageId,
+						message: {
+							service: this,
+							deviceId: this.deviceId,
+							txid: txId,
+						},
+					};
+					this.emit(`message`, message);
+					return message
+				}
+
+				default:
+					{
+						const remaining = ctx.readRemainingAsNewBuffer()
+						Logger.error(`File Transfer Unhandled message id '${messageId}'`, remaining.toString('hex'));
+					}
+					return
+			}
+		}
+
+
+
+
+
 
 		switch (messageId) {
 			case MessageId.RequestSources: {
@@ -158,21 +342,7 @@ export class FileTransfer extends Service<FileTransferData> {
 					sources.push(location);
 				}
 
-				// Final three bytes should be 0x1 0x1 0x1 for Sources, 0x1 0x1 0x0 for dir/ls
-				// const myReducer = (returnValue: any, currentValue: any) => 
-				// returnValue << currentValue; 
 
-				// const first = (!!ctx.read(1)[0])
-				// const last = (!!ctx.read(1)[0])
-
-				const payloadStatus = arrayToBinary(ctx.read(2))
-				const isDir = (!!ctx.read(1)[0])
-
-				//const arr = ctx.read(3);
-				//const statFlags = arrayToBinary(arr)//.reduce((acc, val) => acc >> val);
-
-				//console.warn(arr, StatFlag[statFlags])
-				//console.warn(sourceCount, Payload[payloadStatus], isDir)
 				assert(ctx.isEOF());
 
 				const message = {
