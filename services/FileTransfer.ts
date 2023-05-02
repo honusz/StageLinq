@@ -6,6 +6,7 @@ import { Service } from './Service';
 import type { ServiceMessage, DeviceId } from '../types';
 import { Source } from '../Sources'
 import { StageLinq } from '../StageLinq';
+import { Socket } from 'net';
 
 const MESSAGE_TIMEOUT = 5000; // in ms
 const DOWNLOAD_TIMEOUT = 60000; // in ms
@@ -20,14 +21,14 @@ export interface FileTransferData {
 	offset?: number;
 	sources?: string[];
 	data?: Buffer;
-	signOff?: Uint8Array;
+	statFlags?: number;
 }
 
 enum MessageId {
 	TimeCode = 0x0,
 	FileStat = 0x1,
 	EndOfMessage = 0x2,
-	SourceLocations = 0x3,
+	DirResponse = 0x3,
 	FileTransferId = 0x4,
 	FileTransferChunk = 0x5,
 	DataUpdate = 0x6,
@@ -38,13 +39,30 @@ enum MessageId {
 
 enum Action {
 	RequestStat = 0x7d1,
-	RequestSources = 0x7d2,
+	DirRequest = 0x7d2,
 	Unknown1 = 0x7d3,
 	RequestFileTransferId = 0x7d4,
 	RequestChunkRange = 0x7d5,
 	TransferComplete = 0x7d6,
 	WalMode = 0x7d9,
 }
+
+enum Payload {
+	More = 0,
+	Last = 1,
+	First = 2,
+	Only = 3,
+}
+
+function arrayToBinary(arr: Uint8Array): number {
+	return arr.reduce(
+		(a, bit, i, arr) => a + (bit ? Math.pow(2, arr.length - i - 1) : 0),
+		0
+	)
+}
+
+
+
 
 export interface FileTransferProgress {
 	sizeLeft: number;
@@ -65,6 +83,8 @@ export class FileTransfer extends Service<FileTransferData> {
 	static readonly emitter: EventEmitter = new EventEmitter();
 	static #txid: number = 2;
 	#isAvailable: boolean = true;
+	private pathCache: Map<string, number> = new Map();
+	private transfers: Map<number, Transfer> = new Map();
 
 	/**
 	 * FileTransfer Service Class
@@ -104,6 +124,12 @@ export class FileTransfer extends Service<FileTransferData> {
 		}
 
 		const txId = ctx.readUInt32();
+
+		const length = ctx.sizeLeft();
+		const buf = ctx.readRemainingAsNewArrayBuffer();
+		ctx.seek(0 - length);
+		if (txId > 0) this.emit(txId.toString(), buf)
+
 		const messageId: MessageId = ctx.readUInt32();
 
 		switch (messageId) {
@@ -123,7 +149,7 @@ export class FileTransfer extends Service<FileTransferData> {
 				return message
 			}
 
-			case MessageId.SourceLocations: {
+			case MessageId.DirResponse: {
 				const sources: string[] = [];
 				const sourceCount = ctx.readUInt32();
 				for (let i = 0; i < sourceCount; ++i) {
@@ -133,7 +159,20 @@ export class FileTransfer extends Service<FileTransferData> {
 				}
 
 				// Final three bytes should be 0x1 0x1 0x1 for Sources, 0x1 0x1 0x0 for dir/ls
-				const signOff = ctx.read(3);
+				// const myReducer = (returnValue: any, currentValue: any) => 
+				// returnValue << currentValue; 
+
+				// const first = (!!ctx.read(1)[0])
+				// const last = (!!ctx.read(1)[0])
+
+				const payloadStatus = arrayToBinary(ctx.read(2))
+				const isDir = (!!ctx.read(1)[0])
+
+				//const arr = ctx.read(3);
+				//const statFlags = arrayToBinary(arr)//.reduce((acc, val) => acc >> val);
+
+				//console.warn(arr, StatFlag[statFlags])
+				//console.warn(sourceCount, Payload[payloadStatus], isDir)
 				assert(ctx.isEOF());
 
 				const message = {
@@ -143,9 +182,10 @@ export class FileTransfer extends Service<FileTransferData> {
 						deviceId: this.deviceId,
 						txid: txId,
 						sources: sources,
-						signOff: signOff,
+						//statFlags: statFlags,
 					},
 				};
+				//console.warn(message.message.sources, message.message.signOff)
 				this.emit(`message`, message);
 				return message
 			}
@@ -171,6 +211,7 @@ export class FileTransfer extends Service<FileTransferData> {
 
 			case MessageId.EndOfMessage: {
 				// End of result indication?
+				const data = ctx.readRemainingAsNewBuffer();
 				const message = {
 					id: messageId,
 					message: {
@@ -179,6 +220,7 @@ export class FileTransfer extends Service<FileTransferData> {
 						txid: txId,
 					},
 				};
+				console.warn(`end of message ${this.deviceId.string} ${txId} `, data)
 				this.emit(`message`, message);
 				return message
 			}
@@ -241,6 +283,8 @@ export class FileTransfer extends Service<FileTransferData> {
 			case MessageId.Unknown0: {
 				// sizeLeft() of 6 means its not an offline analyzer
 				// TODO name Unknown0 and finalize this
+				this.dirRequest('/DJ2 (USB 1)/');
+
 				const message = {
 					id: messageId,
 					message: {
@@ -251,6 +295,7 @@ export class FileTransfer extends Service<FileTransferData> {
 					},
 				};
 				this.emit(`message`, message);
+				console.info(this.deviceId.string, message.message.txid, message.message.data)
 				return message
 			}
 
@@ -287,7 +332,7 @@ export class FileTransfer extends Service<FileTransferData> {
 			const msgData = { ...data.message }
 			delete msgData.service
 			delete msgData.deviceId
-			Logger.debug(data.message.deviceId.string, MessageId[data.id], msgData)
+			Logger.info(data.message.deviceId.string, MessageId[data.id], msgData)
 		}
 
 		this.emit('fileMessage', data);
@@ -296,7 +341,7 @@ export class FileTransfer extends Service<FileTransferData> {
 		 * Emit event message for txid if there is a listener
 		 */
 		if (data.message?.txid && this.listenerCount(data.message.txid.toString())) {
-			this.emit(data.message.txid.toString(), data);
+			//this.emit(data.message.txid.toString(), data);
 		}
 
 		/**
@@ -309,7 +354,7 @@ export class FileTransfer extends Service<FileTransferData> {
 		/**
 		 * reply that we offer no sources.
 		 */
-		if (data && data.id === Action.RequestSources) {
+		if (data && data.id === Action.DirRequest) {
 			this.sendNoSourcesReply(data.message);
 		}
 
@@ -317,15 +362,15 @@ export class FileTransfer extends Service<FileTransferData> {
 		 * Request Sources
 		 */
 		if (data && data.id === MessageId.Unknown0) {
-			this.requestSources(1);
+			//this.requestDir(1);
 		}
 
 		/**
 		 * If sources are changed, send updateSources request
 		 */
-		if (data && data.id === MessageId.SourceLocations && data.message.signOff[2] === 1) {
+		if (data && data.id === MessageId.DirResponse) {
 			Logger.silly(`getting sources for `, this.deviceId.string);
-			this.updateSources(data.message.sources);
+			//this.updateSources(data.message.sources);
 		}
 	}
 
@@ -463,6 +508,16 @@ export class FileTransfer extends Service<FileTransferData> {
 		}
 	}
 
+	async dirRequest(path: string) {
+		const transfer = new Dir(this.newTxid(), path, this.socket)
+		this.transfers.set(transfer.txid, transfer);
+		this.pathCache.set(path, transfer.txid);
+
+		this.addListener(transfer.txid.toString(), (data) => transfer.listener(data))
+		this.requestPathInfo(path, transfer.txid);
+
+	}
+
 	async getSourceDirInfo(source: Source) {
 		const dbPath = `/${source.name}/Engine Library/Database2`
 		const transfer = {
@@ -474,7 +529,7 @@ export class FileTransfer extends Service<FileTransferData> {
 		let returnList: string[][] = [];
 		try {
 			await this.requestPathInfo(transfer.filepath, transfer.txid);
-			const dbFileList = await this.waitForFileMessage('fileMessage', MessageId.SourceLocations, transfer.txid);
+			const dbFileList = await this.waitForFileMessage('fileMessage', MessageId.DirResponse, transfer.txid);
 			console.log(`Contents of ${transfer.filepath}`, dbFileList.sources);
 			for (const file of dbFileList.sources) {
 				const _transfer = {
@@ -555,13 +610,15 @@ export class FileTransfer extends Service<FileTransferData> {
 	/**
 	 * Request current sources attached to device
 	 */
-	private async requestSources(txid: number): Promise<void> {
+	private async requestDir(txid: number): Promise<void> {
 		// 0x7d2: Request available sources
 		const ctx = new WriteContext();
 		ctx.writeFixedSizedString(MAGIC_MARKER);
 		ctx.writeUInt32(txid);
 		ctx.writeUInt32(0x7d2); // Database query
-		ctx.writeUInt32(0x0);
+		//ctx.writeUInt32(0x0);
+		//ctx.writeNetworkStringUTF16("/DJ2 (USB 1)/Engine Library/Music/biskuwi/Io")
+		ctx.writeNetworkStringUTF16("/DJ2 (USB 1)/Engine Library/Music")
 		await this.writeWithLength(ctx);
 	}
 
@@ -645,6 +702,147 @@ export class FileTransfer extends Service<FileTransferData> {
 		ctx.writeUInt8(0x0);
 		await this.writeWithLength(ctx);
 	}
+}
 
+// class FSItem {
+// 	path: string;
+
+// 	constructor(path: string) {
+// 		this.path = path;
+// 	}
+// }
+
+// class fFile extends FSItem {
+// 	size: number;
+
+// 	constructor(path: string, size?: number) {
+// 		super(path);
+// 		this.size = size || null
+// 	}
+// }
+
+// class dDir extends FSItem {
+// 	private fileNames: string[] = [];
+// 	private subDirNames: string[] = [];
+
+// 	constructor(path: string) {
+// 		super(path);
+// 	}
+
+// 	addFile(fileName: string) {
+// 		this.fileNames.push(fileName)
+// 	}
+
+// 	addSubDir(subDirName: string) {
+// 		this.subDirNames.push(subDirName);
+// 	}
+// }
+
+
+abstract class Transfer extends EventEmitter {
+	txid: number;
+	path: string;
+	socket: Socket;
+
+	constructor(txid: number, path: string, socket: Socket) {
+		super();
+		this.txid = txid;
+		this.path = path;
+		this.socket = socket;
+	}
+
+	abstract listener(data: Buffer): void
+}
+
+class Dir extends Transfer {
+	fileNames: string[] = [];
+	private subDirNames: string[] = [];
+
+	constructor(txid: number, path: string, socket: Socket) {
+		super(txid, path, socket);
+	}
+
+	listener(data: ArrayBuffer): void {
+
+		//console.warn('Transfer Listener!! ', data);
+		const ctx = new ReadContext(data, false);
+		const messageId: MessageId = ctx.readUInt32();
+
+		console.info(`{${this.txid}} Message ${MessageId[messageId]}`);
+
+		switch (messageId) {
+
+			case MessageId.DirResponse: {
+				const items: string[] = [];
+				const sourceCount = ctx.readUInt32();
+				for (let i = 0; i < sourceCount; ++i) {
+					// We get a location
+					const location = ctx.readNetworkStringUTF16();
+					items.push(location);
+				}
+
+				const isFirst = !!ctx.read(1)[0]
+				const isLast = !!ctx.read(1)[0]
+				const isDir = (!!ctx.read(1)[0])
+
+				if (isDir) {
+					this.addSubDirs(items)
+				} else {
+					this.addFiles(items);
+				}
+
+				if (items.length && isLast) console.warn(isFirst, isLast, isDir, this.subDirNames, this.fileNames)
+				// if (isLast) {
+				// 	console.warn(this.subDirNames)
+				// 	console.warn(this.fileNames)
+				// }
+				//console.warn(sourceCount, Payload[payloadStatus], isDir)
+				assert(ctx.isEOF());
+				break;
+			}
+
+
+			// 	default:
+			// 		{
+			// 			const remaining = ctx.readRemainingAsNewBuffer()
+			// 			Logger.error(`File Transfer Unhandled message id '${messageId}'`, remaining.toString('hex'));
+			// 		}
+			// 		return
+		}
+	}
+
+	addFile(fileName: string) {
+		this.fileNames.push(fileName)
+	}
+
+	addFiles(fileNames: string[]) {
+		this.fileNames = [...this.fileNames, ...fileNames]
+	}
+
+	addSubDir(subDirName: string) {
+		this.subDirNames.push(subDirName);
+	}
+
+	addSubDirs(subDirNames: string[]) {
+		this.subDirNames = [...this.subDirNames, ...subDirNames]
+	}
+
+
+
+
+
+}
+
+class File extends Transfer {
+	filename: string = "";
+	size: number = null;
+	bytes: Buffer = null;
+	fileStat: Buffer = null;
+
+	constructor(txid: number, path: string, socket: Socket) {
+		super(txid, path, socket);
+	}
+
+	listener(data: Buffer): void { }
 
 }

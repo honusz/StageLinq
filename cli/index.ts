@@ -65,10 +65,10 @@ async function main() {
 		downloadDbSources: true,
 		actingAs: ActingAsDevice.StageLinqJS,
 		services: [
-			Services.StateMap,
+			//Services.StateMap,
 			Services.FileTransfer,
-			Services.BeatInfo,
-			Services.Broadcast,
+			//Services.BeatInfo,
+			//Services.Broadcast,
 		],
 	}
 
