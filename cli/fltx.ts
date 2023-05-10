@@ -1,5 +1,5 @@
-import { ActingAsDevice, StageLinqOptions, Services, DeviceId } from '../types';
-import { StateData, StateMap } from '../services';
+import { ActingAsDevice, StageLinqOptions, Services } from '../types';
+//import { StateData, StateMap } from '../services';
 import { sleep } from '../utils/sleep';
 import { StageLinq } from '../StageLinq';
 

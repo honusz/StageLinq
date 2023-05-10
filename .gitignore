@@ -25,3 +25,4 @@ node_modules/
 
 # Scratch folder
 _scratch_
+.vscode/launch.json

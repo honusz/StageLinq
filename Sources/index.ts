@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import { DbConnection } from './DbConnection';
 import { getTempFilePath } from '../utils';
 import { StageLinq } from '../StageLinq';
-import { Broadcast, BroadcastMessage, FileTransfer } from '../services';
+import { Broadcast, BroadcastMessage, FileTransfer, File, Dir } from '../services';
 
 
 export declare interface Sources {
@@ -20,6 +20,8 @@ export declare interface Sources {
 
 export class Sources extends EventEmitter {
 	#sources: Map<string, Source> = new Map();
+	//#rootUpdateChannel: Dir = null;
+
 
 	/**
 	 * Sources EndPoint Class
@@ -144,6 +146,8 @@ export class Source {
 	name: string;
 	deviceId: DeviceId;
 	#databases: Map<string, Database> = new Map();
+	#sourceDirChannel: Dir = null;
+	#file: File = null;
 
 	/**
 	 * Source Type Class
@@ -153,9 +157,11 @@ export class Source {
 	 */
 
 
-	constructor(name: string, deviceId: DeviceId) {
+	constructor(name: string, deviceId: DeviceId, dirChan: Dir, file: File) {
 		this.name = name;
 		this.deviceId = deviceId;
+		this.#sourceDirChannel = dirChan;
+		this.#file = file;
 	}
 	/**
 	 * Get a Database by File Name
