@@ -46,10 +46,10 @@ async function downloadFile(sourceName: string, deviceId: DeviceId, path: string
 	try {
 		const source = StageLinq.sources.getSource(sourceName, deviceId);
 		const data = await StageLinq.sources.downloadFile(source, path);
-		if (dest && data) {
-			const filePath = `${dest}/${path.split('/').pop()}`
-			fs.writeFileSync(filePath, Buffer.from(data));
-		}
+		// if (dest && data) {
+		// 	const filePath = `${dest}/${path.split('/').pop()}`
+		// 	fs.writeFileSync(filePath, Buffer.from(data));
+		//}
 	} catch (e) {
 		console.error(`Could not download ${path}`);
 		console.error(e)
@@ -68,7 +68,7 @@ async function main() {
 			//Services.StateMap,
 			Services.FileTransfer,
 			//Services.BeatInfo,
-			//Services.Broadcast,
+			Services.Broadcast,
 		],
 	}
 

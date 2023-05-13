@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import { DbConnection } from './DbConnection';
 import { getTempFilePath } from '../utils';
 import { StageLinq } from '../StageLinq';
-import { Broadcast, BroadcastMessage, FileTransfer, File, Dir } from '../services';
+import { Broadcast, BroadcastMessage, FileTransfer, Database, Dir } from '../services';
 
 
 export declare interface Sources {
@@ -108,12 +108,12 @@ export class Sources extends EventEmitter {
 	 * @param {string} path
 	 * @returns {Promise<Uint8Array>}
 	 */
-	async downloadFile(source: Source, path: string): Promise<Uint8Array> {
+	async downloadFile(source: Source, path: string): Promise<void> {
 		const service = StageLinq.devices.device(source.deviceId).service('FileTransfer') as FileTransfer;
 		await service.isAvailable();
-
+		const filePath = getTempFilePath(`/${source.name}`);
 		try {
-			const file = await service.getFile(source, path);
+			const file = await service.getFile(path, filePath);
 			return file;
 		} catch (err) {
 			Logger.error(err);
@@ -147,7 +147,7 @@ export class Source {
 	deviceId: DeviceId;
 	#databases: Map<string, Database> = new Map();
 	#sourceDirChannel: Dir = null;
-	#file: File = null;
+	//#file: File = null;
 
 	/**
 	 * Source Type Class
@@ -157,11 +157,11 @@ export class Source {
 	 */
 
 
-	constructor(name: string, deviceId: DeviceId, dirChan: Dir, file: File) {
+	constructor(name: string, deviceId: DeviceId, dirChan: Dir) {
 		this.name = name;
 		this.deviceId = deviceId;
 		this.#sourceDirChannel = dirChan;
-		this.#file = file;
+		//this.#file = file;
 	}
 	/**
 	 * Get a Database by File Name
@@ -197,92 +197,92 @@ export class Source {
 }
 
 
-class Database {
-	deviceId: DeviceId = null;
-	size: number;
-	filename: string;
-	remotePath: string;
-	localPath: string = null;
-	uuid: string = null;
-	source: Source = null;
-	sourceName: string = null;
-	txid: number;
-	downloaded: boolean = false;
+// class Database extends File {
+// 	deviceId: DeviceId = null;
+// 	size: number;
+// 	filename: string;
+// 	remotePath: string;
+// 	localPath: string = null;
+// 	uuid: string = null;
+// 	source: Source = null;
+// 	sourceName: string = null;
+// 	txid: number;
+// 	downloaded: boolean = false;
 
-	/**
-	 * Database Type Class
-	 * @constructor
-	 * @param {string} filename name of the file EG: 'm.db'
-	 * @param {number} size size of the file
-	 * @param {string} remotePath remote path (excl filename) of file
-	 * @param {Source} source Source that the DB file is on
-	 * @param {Transfer} transfer
-	 */
-	constructor(filename: string, size: number, remotePath: string, source: Source) {
-		this.filename = filename;
-		this.size = size;
-		this.remotePath = remotePath;
-		this.sourceName = source.name;
-		this.source = source;
-		this.deviceId = source.deviceId;
-		this.localPath = getTempFilePath(`${source.deviceId.string}/${source.name}/`);
-	}
+// 	/**
+// 	 * Database Type Class
+// 	 * @constructor
+// 	 * @param {string} filename name of the file EG: 'm.db'
+// 	 * @param {number} size size of the file
+// 	 * @param {string} remotePath remote path (excl filename) of file
+// 	 * @param {Source} source Source that the DB file is on
+// 	 * @param {Transfer} transfer
+// 	 */
+// 	constructor(filename: string, size: number, remotePath: string, source: Source) {
+// 		this.filename = filename;
+// 		this.size = size;
+// 		this.remotePath = remotePath;
+// 		this.sourceName = source.name;
+// 		this.source = source;
+// 		this.deviceId = source.deviceId;
+// 		this.localPath = getTempFilePath(`${source.deviceId.string}/${source.name}/`);
+// 	}
 
-	/**
-	 * Get full remote path & filename
-	 */
-	get remoteDBPath() {
-		return `${this.remotePath}/${this.filename}`
-	}
+// 	/**
+// 	 * Get full remote path & filename
+// 	 */
+// 	get remoteDBPath() {
+// 		return `${this.remotePath}/${this.filename}`
+// 	}
 
-	/**
-	 * Get full local path & filename
-	 */
-	get localDBPath() {
-		return `${this.localPath}/${this.filename}`
-	}
+// 	/**
+// 	 * Get full local path & filename
+// 	 */
+// 	get localDBPath() {
+// 		return `${this.localPath}/${this.filename}`
+// 	}
 
-	/**
-	 * Create new Connection to the DB for Querying
-	 * @returns {DbConnection}
-	 */
-	connection(): DbConnection {
-		return new DbConnection(this.localDBPath)
-	}
+// 	/**
+// 	 * Create new Connection to the DB for Querying
+// 	 * @returns {DbConnection}
+// 	 */
+// 	connection(): DbConnection {
+// 		return new DbConnection(this.localDBPath)
+// 	}
 
 
-	/**
-	 * Downloads the Database
-	 */
-	async downloadDb() {
-		const source = StageLinq.sources.getSource(this.sourceName, this.deviceId)
-		const service = StageLinq.devices.device(this.deviceId).service("FileTransfer") as FileTransfer;
+// 	/**
+// 	 * Downloads the Database
+// 	 */
+// 	async downloadDb() {
+// 		const source = StageLinq.sources.getSource(this.sourceName, this.deviceId)
+// 		const service = StageLinq.devices.device(this.deviceId).service("FileTransfer") as FileTransfer;
 
-		Logger.info(`Reading database ${source.deviceId.string}/${source.name}/${this.filename}`);
-		const file = await service.getFile(source, this.remoteDBPath);
-		Logger.info(`Saving ${this.remoteDBPath}} to ${this.localDBPath}`);
-		fs.writeFileSync(this.localDBPath, Buffer.from(file));
-		this.downloaded = true;
-		await this.processDB();
-		Logger.info(`Downloaded ${source.deviceId.string}/${source.name} to ${this.remoteDBPath}`);
-	}
+// 		Logger.info(`Reading database ${source.deviceId.string}/${source.name}/${this.filename}`);
+// 		await service.getFile(this.remoteDBPath, this.localDBPath);
+// 		//Logger.info(`Saving ${this.remoteDBPath}} to ${this.localDBPath}`);
+// 		//fs.writeFileSync(this.localDBPath, Buffer.from(file));
+// 		this.downloaded = true;
+// 		await this.processDB();
+// 		Logger.info(`Downloaded ${source.deviceId.string}/${source.name} to ${this.remoteDBPath}`);
+// 	}
 
-	private async processDB() {
-		const db = new DbConnection(this.localDBPath)
-		const result: DBInfo[] = await db.querySource('SELECT * FROM Information LIMIT 1')
-		this.uuid = result[0].uuid
-		db.close();
+// 	private async processDB() {
+// 		const db = new DbConnection(this.localDBPath)
+// 		const result: DBInfo[] = await db.querySource('SELECT * FROM Information LIMIT 1')
+// 		this.uuid = result[0].uuid
+// 		db.close();
 
-		if (StageLinq.options.services.includes(Services.Broadcast)) {
-			Broadcast.emitter.addListener(this.uuid, (key, value) => this.broadcastListener(key, value))
-			Logger.debug(`Sources added broadcast listener for ${this.uuid}`);
-		}
-	}
+// 		if (StageLinq.options.services.includes(Services.Broadcast)) {
+// 			Broadcast.emitter.addListener(this.uuid, (key, value) => this.broadcastListener(key, value))
+// 			Logger.debug(`Sources added broadcast listener for ${this.uuid}`);
+// 		}
+// 	}
 
-	private broadcastListener(key: string, value: BroadcastMessage) {
-		Logger.silly(`MSG FROM BROADCAST ${key}`, value);
-		// const service = StageLinq.devices.device(this.deviceId).service('FileTransfer') as FileTransfer
-		// service.getSourceDirInfo(this.source);
-	}
+// 	private broadcastListener(key: string, value: BroadcastMessage) {
+// 		Logger.silly(`MSG FROM BROADCAST ${key}`, value);
+// 		// const service = StageLinq.devices.device(this.deviceId).service('FileTransfer') as FileTransfer
+// 		// service.getSourceDirInfo(this.source);
+// 	}
 
-}
+// }
