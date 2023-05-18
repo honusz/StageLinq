@@ -6,6 +6,8 @@ import { sleep, WriteContext, ReadContext } from '../utils';
 import { Socket, RemoteInfo, createSocket } from 'dgram';
 import { subnet } from 'ip';
 import { networkInterfaces } from 'os';
+//const hash = require('crypto').createHash;
+import { createHash } from 'crypto';
 
 const ANNOUNCEMENT_INTERVAL = 1000;
 const LISTEN_PORT = 51337;
@@ -33,6 +35,8 @@ export class Discovery extends EventEmitter {
 	private peers: Map<string, ConnectionInfo> = new Map();
 	private deviceId: DeviceId = null;
 	private announceTimer: NodeJS.Timer;
+	//private infoHashes: Map<string, co
+	private infoHashes: Set<string> = new Set();
 
 	/**
 	 * Get list of devices
@@ -74,7 +78,8 @@ export class Discovery extends EventEmitter {
 		await sleep(500);
 		this.broadcastAddresses = this.findBroadcastIPs();
 		const msg = this.writeDiscoveryMessage(discoveryMessage);
-
+		const hash = await this.hashMessage(msg)
+		this.infoHashes.add(hash)
 		this.broadcastMessage(this.socket, msg, LISTEN_PORT, this.broadcastAddresses)
 		this.emit('announcing', discoveryMessage);
 		Logger.debug(`Broadcast Discovery Message ${this.deviceId.string} ${discoveryMessage.source}`);
@@ -119,6 +124,11 @@ export class Discovery extends EventEmitter {
 		}
 	}
 
+	private async hashMessage(message: Uint8Array): Promise<string> {
+		return createHash('sha256').update(message).digest('base64')
+	}
+
+
 	/**
 	 * Listen for new devices on the network and callback when a new one is found.
 	 * @param {DeviceDiscoveryCallback} callback Callback when new device is discovered.
@@ -126,14 +136,23 @@ export class Discovery extends EventEmitter {
 
 	private async listenForDevices(callback: DeviceDiscoveryCallback) {
 		this.socket = createSocket('udp4');
-		this.socket.on('message', (announcement: Uint8Array, remote: RemoteInfo) => {
-			const ctx = new ReadContext(announcement.buffer, false);
-			const result = this.readConnectionInfo(ctx, remote.address);
-			if (!this.address) {
-				this.address = remote.address;
+		this.socket.on('message', async (announcement: Uint8Array, remote: RemoteInfo) => {
+
+			const hash = await this.hashMessage(announcement);
+			if (!this.infoHashes.has(hash)) {
+				this.infoHashes.add(hash)
+				const ctx = new ReadContext(announcement.buffer, false);
+				const result = this.readConnectionInfo(ctx, remote.address);
+				if (!this.address) {
+					this.address = remote.address;
+				}
+				assert(ctx.tell() === remote.size);
+				callback(result);
 			}
-			assert(ctx.tell() === remote.size);
-			callback(result);
+			//const hash = createHash('sha256')
+			//hash.update(announcement)
+			//console.log(hash.digest('base64'))
+
 		});
 		this.socket.bind({
 			port: LISTEN_PORT,
