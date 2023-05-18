@@ -1,5 +1,5 @@
-import { ActingAsDevice, StageLinqOptions, Services } from '../types';
-//import { StateData, StateMap } from '../services';
+import { ActingAsDevice, StageLinqOptions, Services, DeviceId } from '../types';
+import { Broadcast } from '../services';
 import { sleep } from '../utils/sleep';
 import { StageLinq } from '../StageLinq';
 
@@ -11,6 +11,7 @@ async function main() {
         actingAs: ActingAsDevice.NowPlaying,
         services: [
             Services.FileTransfer,
+            Services.Broadcast
         ],
     }
 
@@ -35,6 +36,10 @@ async function main() {
     stageLinq.logger.on('debug', (...args: any) => {
         console.debug(...args);
         args.push("\n");
+    });
+
+    Broadcast.emitter.on('message', async (deviceId: DeviceId, name: string, value) => {
+        console.log(`[BROADCAST] ${deviceId.string} ${name}`, value);
     });
 
     let arr = Uint8Array.from([1, 1, 0])

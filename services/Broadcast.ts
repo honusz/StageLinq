@@ -36,8 +36,9 @@ export class Broadcast extends Service<BroadcastData> {
 		if (!length && ctx.sizeLeft()) {
 			const message = {
 				id: length,
+				deviceId: new DeviceId(ctx.read(16)),
+				service: this,
 				message: {
-					deviceId: new DeviceId(ctx.read(16)),
 					name: ctx.readNetworkStringUTF16(),
 					port: ctx.readUInt16(),
 					sizeLeft: ctx.sizeLeft(),
@@ -48,6 +49,8 @@ export class Broadcast extends Service<BroadcastData> {
 		} else {
 			const message = {
 				id: length,
+				deviceId: this.deviceId,
+				service: this,
 				message: {
 					json: ctx.getString(length),
 					sizeLeft: ctx.sizeLeft(),

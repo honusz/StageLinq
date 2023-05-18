@@ -1,10 +1,10 @@
-import { ActingAsDevice, StageLinqOptions, Services, DeviceId } from '../types';
+import { ActingAsDevice, StageLinqOptions, Services, DeviceId, ServiceMessage } from '../types';
 import { StateData, StateMap, BeatData, BeatInfo, FileTransfer, Broadcast } from '../services';
 import { Source } from '../Sources'
 import { sleep } from '../utils/sleep';
 import { StageLinq } from '../StageLinq';
 import { Logger } from '../LogEmitter';
-import * as fs from 'fs';
+//import * as fs from 'fs';
 import * as os from 'os';
 import * as Path from 'path';
 
@@ -45,11 +45,12 @@ async function downloadFile(sourceName: string, deviceId: DeviceId, path: string
 	}
 	try {
 		const source = StageLinq.sources.getSource(sourceName, deviceId);
-		const data = await StageLinq.sources.downloadFile(source, path);
+		const data = await source.downloadFile(path, dest);
 		// if (dest && data) {
 		// 	const filePath = `${dest}/${path.split('/').pop()}`
 		// 	fs.writeFileSync(filePath, Buffer.from(data));
-		//}
+		// }
+		console.log(`Downloaded ${data.fileName} to ${data.localPath}`)
 	} catch (e) {
 		console.error(`Could not download ${path}`);
 		console.error(e)
@@ -65,9 +66,9 @@ async function main() {
 		downloadDbSources: true,
 		actingAs: ActingAsDevice.StageLinqJS,
 		services: [
-			//Services.StateMap,
+			Services.StateMap,
 			Services.FileTransfer,
-			//Services.BeatInfo,
+			Services.BeatInfo,
 			Services.Broadcast,
 		],
 	}
@@ -132,7 +133,8 @@ async function main() {
 			console.log(`[BROADCAST] ${deviceId.string} ${name}`, value);
 			const db = StageLinq.sources.getDBByUuid(value.databaseUuid);
 			if (db.length) {
-				const connection = db[0].connection();
+				const connection = await db[0].open();
+				//(await connection).getTrackById
 				const track = await connection.getTrackById(value.trackId);
 				connection.close();
 				console.log('[BROADCAST] Track Changed:', track);
@@ -144,9 +146,10 @@ async function main() {
 
 	if (stageLinqOptions.services.includes(Services.StateMap)) {
 
-		async function deckIsMaster(data: StateData) {
-			if (data.json.state) {
-				const deck = parseInt(data.name.substring(12, 13));
+		async function deckIsMaster(data: ServiceMessage<StateData>) {
+			const { ...message } = data.message
+			if (message.json.state) {
+				const deck = parseInt(message.name.substring(12, 13));
 				await sleep(250);
 				const track = StageLinq.status.getTrack(data.deviceId, deck);
 				console.log(`Now Playing: `, track);
@@ -167,8 +170,8 @@ async function main() {
 			service.subscribe();
 		});
 
-		StateMap.emitter.on('stateMessage', async (data: StateData) => {
-			Logger.info(`[STATEMAP] ${data.deviceId.string} ${data.name} => ${JSON.stringify(data.json)}`);
+		StateMap.emitter.on('stateMessage', async (data: ServiceMessage<StateData>) => {
+			Logger.info(`[STATEMAP] ${data.deviceId.string} ${data.message.name} => ${JSON.stringify(data.message.json)}`);
 		});
 
 	}
@@ -218,12 +221,13 @@ async function main() {
 		 *  Will be triggered everytime a player's beat counter crosses the resolution threshold
 		 * @param {BeatData} bd
 		 */
-		function beatCallback(bd: BeatData,) {
+		function beatCallback(data: ServiceMessage<BeatData>,) {
+			const { ...bd } = data.message
 			let deckBeatString = ""
 			for (let i = 0; i < bd.deckCount; i++) {
 				deckBeatString += `Deck: ${i + 1} Beat: ${bd.deck[i].beat.toFixed(3)}/${bd.deck[i].totalBeats.toFixed(0)} `
 			}
-			console.log(`[BEATINFO] ${bd.deviceId.string} clock: ${bd.clock} ${deckBeatString}`);
+			console.log(`[BEATINFO] ${data.deviceId.string} clock: ${bd.clock} ${deckBeatString}`);
 		}
 
 		////  callback is optional, BeatInfo messages can be consumed by:

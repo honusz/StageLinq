@@ -47,8 +47,6 @@ const controllerStateValues = [...playerStateValues, ...mixerStateValues];
 
 
 export interface StateData {
-	service: StateMap;
-	deviceId: DeviceId;
 	name?: string;
 	json?: {
 		type: number;
@@ -141,11 +139,11 @@ export class StateMap extends Service<StateData> {
 					const json = JSON.parse(jsonString);
 					const message: ServiceMessage<StateData> = {
 						id: MAGIC_MARKER_JSON,
+						service: this,
+						deviceId: this.deviceId,
 						message: {
 							name: name,
 							json: json,
-							service: this,
-							deviceId: this.deviceId,
 						},
 					};
 					this.emit(`message`, message);
@@ -163,9 +161,9 @@ export class StateMap extends Service<StateData> {
 
 				const message: ServiceMessage<StateData> = {
 					id: MAGIC_MARKER_INTERVAL,
+					service: this,
+					deviceId: this.deviceId,
 					message: {
-						service: this,
-						deviceId: this.deviceId,
 						name: name,
 						interval: interval,
 					},
@@ -184,14 +182,14 @@ export class StateMap extends Service<StateData> {
 	protected messageHandler(data: ServiceMessage<StateData>): void {
 
 		if (this.listenerCount(data?.message?.name) && data?.message?.json) {
-			this.emit(data.message.name, data.message)
+			this.emit(data.message.name, data)
 		}
 
 		if (data?.message?.interval) {
-			this.sendStateResponse(data.message.name, data.message.service.socket);
+			this.sendStateResponse(data.message.name, data.service.socket);
 		}
 		if (data?.message?.json) {
-			this.emit('stateMessage', data.message);
+			this.emit('stateMessage', data);
 		}
 	}
 

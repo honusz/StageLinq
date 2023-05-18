@@ -1,5 +1,5 @@
 import { DeviceId } from './DeviceId';
-
+import { Service } from '../services';
 
 export interface DiscoveryMessage {
 	deviceId: DeviceId;
@@ -23,6 +23,8 @@ export interface ConnectionInfo extends DiscoveryMessage {
 
 export interface ServiceMessage<T> {
 	id: number;
+	deviceId: DeviceId;
+	service: Service<T>;
 	message: T;
 }
 

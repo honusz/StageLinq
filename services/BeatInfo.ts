@@ -5,7 +5,7 @@ import type { ServiceMessage, DeviceId } from '../types';
 import { EventEmitter } from 'events';
 
 
-type BeatCallback = (n: BeatData) => void;
+type BeatCallback = (n: ServiceMessage<BeatData>) => void;
 
 type BeatOptions = {
 	everyNBeats: number,
@@ -19,8 +19,6 @@ interface deckBeatData {
 }
 
 export interface BeatData {
-	service: BeatInfo;
-	deviceId: DeviceId;
 	clock: bigint;
 	deckCount: number;
 	deck: deckBeatData[];
@@ -37,7 +35,7 @@ export class BeatInfo extends Service<BeatData> {
 
 	#userBeatCallback: BeatCallback = null;
 	#userBeatOptions: BeatOptions = null;
-	#currentBeatData: BeatData = null;
+	#currentBeatData: ServiceMessage<BeatData> = null;
 	protected isBufferedService: boolean = true;
 
 	/**
@@ -70,7 +68,7 @@ export class BeatInfo extends Service<BeatData> {
 	 * Get current BeatData
 	 * @returns {BeatData}
 	 */
-	getBeatData(): BeatData {
+	getBeatData(): ServiceMessage<BeatData> {
 		return this.#currentBeatData;
 	}
 
@@ -117,9 +115,9 @@ export class BeatInfo extends Service<BeatData> {
 		assert(ctx.isEOF())
 		const message = {
 			id: id,
+			service: this,
+			deviceId: this.deviceId,
 			message: {
-				service: this,
-				deviceId: this.deviceId,
 				clock: clock,
 				deckCount: deckCount,
 				deck: deck,
@@ -144,12 +142,12 @@ export class BeatInfo extends Service<BeatData> {
 		}
 
 		if (!this.#currentBeatData) {
-			this.#currentBeatData = data.message;
+			this.#currentBeatData = data;
 			if (this.listenerCount('beatMessage')) {
-				this.emit('beatMessage', data.message);
+				this.emit('beatMessage', data);
 			}
 			if (this.#userBeatCallback) {
-				this.#userBeatCallback(data.message);
+				this.#userBeatCallback(data);
 			}
 
 		}
@@ -159,7 +157,7 @@ export class BeatInfo extends Service<BeatData> {
 		for (let i = 0; i < data.message.deckCount; i++) {
 			if (resCheck(
 				this.#userBeatOptions.everyNBeats,
-				this.#currentBeatData.deck[i].beat,
+				this.#currentBeatData.message.deck[i].beat,
 				data.message.deck[i].beat)) {
 				hasUpdated = true;
 			}
@@ -170,10 +168,10 @@ export class BeatInfo extends Service<BeatData> {
 				this.emit('beatMessage', data);
 			}
 			if (this.#userBeatCallback) {
-				this.#userBeatCallback(data.message);
+				this.#userBeatCallback(data);
 			}
 		}
-		this.#currentBeatData = data.message;
+		this.#currentBeatData = data;
 	}
 
 }

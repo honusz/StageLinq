@@ -1,8 +1,8 @@
-import { ActingAsDevice, StageLinqOptions, Services, DeviceId } from '../types';
+import { ActingAsDevice, StageLinqOptions, Services, DeviceId, ServiceMessage } from '../types';
 import { StateData, StateMap } from '../services';
 import { sleep } from '../utils/sleep';
 import { StageLinq } from '../StageLinq';
-import * as fs from 'fs';
+//import * as fs from 'fs';
 import * as os from 'os';
 import * as Path from 'path';
 
@@ -26,25 +26,27 @@ async function main() {
 		}
 		try {
 			const source = StageLinq.sources.getSource(sourceName, deviceId);
-			const data = await StageLinq.sources.downloadFile(source, path);
-			if (dest && data) {
-				const filePath = `${dest}/${path.split('/').pop()}`
-				fs.writeFileSync(filePath, Buffer.from(data));
-			}
-			console.log(`Downloaded ${path}`)
+			const data = await source.downloadFile(path, dest);
+			// if (dest && data) {
+			// 	const filePath = `${dest}/${path.split('/').pop()}`
+			// 	fs.writeFileSync(filePath, Buffer.from(data));
+			// }
+			console.log(`Downloaded ${data.fileName} to ${data.localPath}`)
 		} catch (e) {
 			console.error(`Could not download ${path}`);
 			console.error(e)
 		}
 	}
 
-	async function deckIsMaster(data: StateData) {
-		if (data.json.state) {
-			const deck = parseInt(data.name.substring(12, 13))
+	async function deckIsMaster(data: ServiceMessage<StateData>) {
+		const { ...message } = data.message;
+		if (message.json.state) {
+			const deck = parseInt(message.name.substring(12, 13))
 			await sleep(250);
 			const track = StageLinq.status.getTrack(data.deviceId, deck)
 
 			if (StageLinq.options.downloadDbSources) {
+				console.warn(track.source.path)
 				downloadFile(track.source.name, track.source.location, track.source.path, Path.resolve(os.tmpdir()));
 			}
 

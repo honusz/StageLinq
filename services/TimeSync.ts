@@ -96,6 +96,8 @@ export class TimeSynchronization extends Service<TimeSyncData> {
 			};
 			const message = {
 				id: id,
+				deviceId: this.deviceId,
+				service: this,
 				message: {
 					msgs: msgs,
 					timestamp: timestamp,

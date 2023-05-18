@@ -20,9 +20,7 @@ enum MessageId {
 	ServicesRequest = 0x2,
 }
 
-export interface DirectoryData {
-	deviceId: string;
-}
+export interface DirectoryData { }
 
 
 export class Directory extends Service<DirectoryData> {
@@ -90,11 +88,9 @@ export class Directory extends Service<DirectoryData> {
 
 		const directoryData = {
 			id: id,
-			socket: socket,
+			service: this,
 			deviceId: this.deviceId,
-			message: {
-				deviceId: this.deviceId.string
-			},
+			message: {},
 		};
 		this.emit(`message`, directoryData);
 		return directoryData

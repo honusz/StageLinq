@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { StageLinq } from '../StageLinq';
 import { StateData, StateMap } from '../services';
-import { Track, DeviceId } from '../types';
+import { Track, DeviceId, ServiceMessage } from '../types';
 
 
 export class Status extends EventEmitter {
@@ -40,10 +40,11 @@ export class Status extends EventEmitter {
 		}
 	}
 
-	private listener(data: StateData, status: Status) {
-		const deck = parseInt(data.name.substring(12, 13))
-		const property = data.name.split('/').pop()
-		const value = this.getTypedValue(data);
+	private listener(data: ServiceMessage<StateData>, status: Status) {
+		const { ...message } = data.message
+		const deck = parseInt(message.name.substring(12, 13))
+		const property = message.name.split('/').pop()
+		const value = this.getTypedValue(message);
 		const track = status.tracks.get(`{${data.deviceId.string}},${deck}`)
 		this.tracks.set(`{${data.deviceId.string}},${deck}`, Object.assign(track, { [property]: value }));
 	}
