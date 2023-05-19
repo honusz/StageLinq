@@ -1,15 +1,9 @@
 import { EventEmitter } from 'events';
-//import { strict as assert } from 'assert';
-//import { Logger } from '../LogEmitter';
 import { WriteContext, sleep, getTempFilePath } from '../utils';
 import * as fs from 'fs';
-//import { Broadcast, BroadcastMessage } from './';
 import { FileTransfer, FileTransferData } from '../services';
 import { ServiceMessage, DeviceId } from '../types';
-//import { Source } from '../Sources'
-//import { StageLinq } from '../StageLinq';
 import { performance } from 'perf_hooks';
-//import { DbConnection } from '../Sources/DbConnection';
 
 const DOWNLOAD_TIMEOUT = 60000; // in ms
 const MAGIC_MARKER = 'fltx';
@@ -43,10 +37,10 @@ enum Request {
     DBMode = 0x7d9,
 }
 
+
 export abstract class Transfer extends EventEmitter {
     readonly txid: number;
     readonly remotePath: string;
-    //deviceId: DeviceId = null;
     service: FileTransfer;
 
     constructor(service: FileTransfer, path: string,) {
@@ -59,8 +53,6 @@ export abstract class Transfer extends EventEmitter {
     get deviceId(): DeviceId {
         return this.service.deviceId
     }
-
-
 
     getNewMessage(command?: number): WriteContext {
         const ctx = new WriteContext();
@@ -82,7 +74,6 @@ export abstract class Transfer extends EventEmitter {
 
     protected abstract handler(message: ServiceMessage<FileTransferData>): void
 }
-
 
 
 export class Dir extends Transfer {
@@ -107,18 +98,10 @@ export class Dir extends Transfer {
         }
     }
 
-    // private addFile(fileName: string) {
-    //     this.fileNames.push(fileName)
-    // }
-
     private addFiles(fileNames: string[]) {
         fileNames.forEach(file => this.files.add(file))
         this.fileNames = [...this.fileNames, ...fileNames]
     }
-
-    // private addSubDir(subDirName: string) {
-    //     this.subDirNames.push(subDirName);
-    // }
 
     private addSubDirs(subDirNames: string[]) {
         subDirNames.forEach(dir => this.directories.add(dir))
@@ -127,11 +110,7 @@ export class Dir extends Transfer {
 
 }
 
-
-
-
 export class File extends Transfer {
-    //filename: string = "";
     size: number = null;
     localPath: string = null;
     isDownloaded: boolean = false;
@@ -153,7 +132,6 @@ export class File extends Transfer {
 
     get source(): string {
         const remotePath = (this.remotePath.substring(0, 1) === "/") ? this.remotePath.substring(1) : this.remotePath
-
         return remotePath.split('/').shift()
     }
 
@@ -246,42 +224,22 @@ export class File extends Transfer {
                 resolve(data);
             });
             setTimeout(reject, DOWNLOAD_TIMEOUT, 'no response');
-
         });
     }
 
     private transferProgress(tx: File): number {
         const progress = Math.ceil((tx.chunksReceived / tx.chunks) * 100);
-        //console.log(tx.chunksReceived, tx.chunks, `${progress}%`)
         return progress
     }
 
     async downloadFile(): Promise<number> {
 
         const localPath = this.localPath
-
         console.log(`${this.service.deviceId.string} downloading ${this.chunks} chunks to local path: ${localPath}`)
         this.fileStream = fs.createWriteStream(`${localPath}`);
-        //await this.service.requestService()
-        // let chunkMap: Promise<void>[] = []
-
-        // for (let i = 0; i < this.chunks; i++) {
-        //     const thisPromise: Promise<void> = new Promise((resolve, reject) => {
-        //         this.service.requestFileChunk(this.txid, i, i);
-        //         this.on(`chunk:${i}`, () => {
-
-        //             resolve()
-        //         });
-        //         setTimeout(reject, DOWNLOAD_TIMEOUT, `no response for chunk ${i}`);
-        //     });
-        //     chunkMap.push(thisPromise);
-        // }
         const startTime = performance.now();
         const txStatus = setInterval(this.transferProgress, 250, this)
-
         this.service.requestFileChunk(this.txid, 0, this.chunks - 1);
-        //await Promise.all(chunkMap);
-        //await this.checkChunks();
         const endTime = performance.now();
         while (this.size > this.fileStream.bytesWritten) {
             console.info(this.size, this.fileStream.bytesWritten)
@@ -291,7 +249,6 @@ export class File extends Transfer {
 
         console.log(`complete! in ${(endTime - startTime) / 1000}`, this.deviceId.string, this.fileName, this.fileStream.bytesWritten, this.size)
         this.fileStream.end();
-        // this.service.releaseService()
         this.isDownloaded = true;
         return this.fileStream.bytesWritten;
     }
@@ -302,13 +259,4 @@ export class File extends Transfer {
         this.chunks = Math.ceil(this.size / CHUNK_SIZE);
         this.chunkCheck = new Array(this.chunks).fill(false)
     }
-
-    // private async checkChunks(): Promise<boolean> {
-    //     while (this.chunkCheck.includes(false)) {
-    //         const count = this.chunkCheck.filter(c => c === true)
-    //         console.info(`${count.length} of ${this.chunks}`)
-    //         await sleep(250);
-    //     }
-    //     return true
-    // }
 }

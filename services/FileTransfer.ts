@@ -9,6 +9,7 @@ import { Transfer, File, Dir } from '../Sources/transfers'
 import { ServiceMessage, DeviceId } from '../types';
 import { Source } from '../Sources'
 import { StageLinq } from '../StageLinq';
+import { Socket } from 'net';
 //import { performance } from 'perf_hooks';
 //import { DbConnection } from '../Sources/DbConnection';
 
@@ -85,6 +86,7 @@ export class FileTransfer extends Service<FileTransferData> {
 	private pathCache: Map<string, number> = new Map();
 	private transfers: Map<number, Dir | File> = new Map();
 	//private sourceDir: Dir = null;
+	private static socketMap: Map<string, Socket> = new Map()
 
 	/**
 	 * FileTransfer Service Class
@@ -102,6 +104,7 @@ export class FileTransfer extends Service<FileTransferData> {
 		//this.addListener(`message`, (message: ServiceMessage<FileTransferData>) => this.messageHandler(message));
 		this.addListener(`txId:0`, (message: ServiceMessage<FileTransferData>) => this.firstMessage(message));
 		this.addListener(`msgId:${Request.DirInfo.toString()}`, (message: ServiceMessage<FileTransferData>) => this.sendNoSourcesReply(message.message));
+		this.addListener('newDevice', (service: FileTransfer) => FileTransfer.socketMap.set(service.deviceId.string, service.socket))
 	}
 
 	/**
@@ -116,6 +119,7 @@ export class FileTransfer extends Service<FileTransferData> {
 
 	protected instanceListener(eventName: string, ...args: any) {
 		FileTransfer.emitter.emit(eventName, ...args)
+
 	}
 
 	private parseData(ctx: ReadContext): ServiceMessage<FileTransferData> {
@@ -142,8 +146,6 @@ export class FileTransfer extends Service<FileTransferData> {
 			case Request.DirInfo: {
 				assert(ctx.readUInt32() === 0x0)
 				assert(ctx.isEOF());
-
-				//this.sendNoSourcesReply(message.message);
 				break;
 			}
 
@@ -223,12 +225,6 @@ export class FileTransfer extends Service<FileTransferData> {
 				assert(ctx.sizeLeft() <= CHUNK_SIZE);
 				let fileChunk: Buffer = null;
 				if (ctx.sizeLeft()) fileChunk = ctx.readRemainingAsNewBuffer();
-				// try {
-				// 	fileChunk = ctx.readRemainingAsNewBuffer();
-
-				// } catch (err) {
-				// 	console.error(err)
-				// }
 
 				message.message = {
 					data: fileChunk,
