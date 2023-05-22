@@ -91,10 +91,10 @@ async function main() {
 		console.log(...args);
 		args.push("\n");
 	});
-	// StageLinq.logger.on('debug', (...args: any) => {
-	//   console.debug(...args);
-	//   args.push("\n");
-	// });
+	stageLinq.logger.on('debug', (...args: any) => {
+		console.debug(...args);
+		args.push("\n");
+	});
 	//Note: Silly is very verbose!
 	// stageLinq.logger.on('silly', (...args: any) => {
 	//   console.debug(...args);

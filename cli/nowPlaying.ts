@@ -18,6 +18,14 @@ async function main() {
 
     const stageLinq = new StageLinq(stageLinqOptions);
 
+    while (stageLinqOptions.services.includes(Services.StateMap) && !stageLinq.stateMap) {
+        await sleep(250)
+    }
+
+    while (stageLinqOptions.services.includes(Services.FileTransfer) && !stageLinq.fileTransfer) {
+        await sleep(250)
+    }
+
     async function deckIsMaster(data: ServiceMessage<StateData>) {
         const { ...message } = data.message
         if (message.json.state) {
@@ -26,11 +34,12 @@ async function main() {
             const track = StageLinq.status.getTrack(data.deviceId, deck);
             console.log(`Now Playing: `, track);
             if (stageLinqOptions.services.includes(Services.FileTransfer) && StageLinq.options.downloadDbSources) {
-                //const fileTransfer = StageLinq.services.get('FileTransfer') as FileTransfer;
-                // downloadFile(track.source.name, track.source.location, track.source.path, Path.resolve(os.tmpdir()));
                 const file = await stageLinq.fileTransfer.getFileInfo(track.TrackNetworkPath);
-                //console.info(file.size)
+                const txProgress = setInterval(() => {
+                    console.log(file.progressUpdater(file))
+                }, 250)
                 await file.downloadFile()
+                clearInterval(txProgress);
             }
         }
     }

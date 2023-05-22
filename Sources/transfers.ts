@@ -280,19 +280,19 @@ export class File extends Transfer {
         });
     }
 
-    progressUpdater() {
-        const progress = this.transferProgress();
-        Logger.log(`${this._deviceId.string} TXID:${this.txid} ${this.fileName} ${progress.bytesDownloaded.toLocaleString('en-US')} / ${progress.total.toLocaleString('en-US')} ${progress.percentComplete}% elapsed: ${progress.elapsed.toPrecision(3)} secs`)
+    progressUpdater(file: File): string {
+        const progress = this.transferProgress(file);
+        return `${this._deviceId.string} TXID:${this.txid} ${this.fileName} ${progress.bytesDownloaded.toLocaleString('en-US')} / ${progress.total.toLocaleString('en-US')} ${progress.percentComplete}% elapsed: ${progress.elapsed.toPrecision(3)} secs`
     }
 
-    transferProgress(): FileTransferProgress {
+    transferProgress(file: File): FileTransferProgress {
         return {
-            total: this.size,
-            bytesDownloaded: this.chunksReceived * CHUNK_SIZE,
-            sizeLeft: this.size - (this.chunksReceived * CHUNK_SIZE),
-            percentComplete: Math.ceil(this.chunksReceived / this.chunks * 100),
-            startTime: this.downloadStartTime,
-            elapsed: ((performance.now() - this.downloadStartTime) / 1000)
+            total: file.size,
+            bytesDownloaded: file.chunksReceived * CHUNK_SIZE,
+            sizeLeft: file.size - (file.chunksReceived * CHUNK_SIZE),
+            percentComplete: Math.ceil(file.chunksReceived / file.chunks * 100),
+            startTime: file.downloadStartTime,
+            elapsed: ((performance.now() - file.downloadStartTime) / 1000)
         }
 
         //const progress = Math.ceil((tx.chunksReceived / tx.chunks) * 100);
@@ -305,7 +305,9 @@ export class File extends Transfer {
         //Logger.log(`${this.service.deviceId.string} downloading ${this.chunks} chunks to local path: ${localPath}`)
         this.fileStream = fs.createWriteStream(`${localPath}`);
         this.downloadStartTime = performance.now();
-        const txStatus = setInterval(this.progressUpdater.bind(this), 250)
+        const txProgress = setInterval(() => {
+            Logger.debug(this.progressUpdater(this))
+        }, 250)
         this.service.requestFileChunk(this.socket, this.txid, 0, this.chunks - 1);
 
         while (this.size > this.fileStream.bytesWritten) {
@@ -313,9 +315,9 @@ export class File extends Transfer {
             await sleep(250)
         }
         const endTime = performance.now();
-        clearInterval(txStatus);
+        clearInterval(txProgress);
 
-        Logger.log(`TXID: ${this.txid} completed in ${((endTime - this.downloadStartTime) / 1000).toPrecision(3)} secs`, this.deviceId.string, this.fileName, this.fileStream.bytesWritten.toLocaleString('en-US'), this.size.toLocaleString('en-US'))
+        Logger.debug(`TXID: ${this.txid} completed in ${((endTime - this.downloadStartTime) / 1000).toPrecision(3)} secs`, this.deviceId.string, this.fileName, this.fileStream.bytesWritten.toLocaleString('en-US'), this.size.toLocaleString('en-US'))
         this.fileStream.end();
         this.isDownloaded = true;
         return this.fileStream.bytesWritten;

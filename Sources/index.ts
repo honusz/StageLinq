@@ -250,7 +250,7 @@ class Database {
 		const result: DBInfo[] = await db.querySource('SELECT * FROM Information LIMIT 1')
 		this.uuid = result[0].uuid
 		StageLinq.sources.addDatabase(this);
-		console.log(this.uuid, this.file.deviceId.string, this.file.size)
+		// console.log(this.uuid, this.file.deviceId.string, this.file.size)
 
 		db.close();
 		this.file.close();
