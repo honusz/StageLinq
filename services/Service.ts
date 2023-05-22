@@ -7,21 +7,16 @@ import { ReadContext, WriteContext } from '../utils';
 import { Server, Socket, AddressInfo, createServer as CreateServer } from 'net';
 import { StageLinq } from '../StageLinq';
 
-
 const MESSAGE_TIMEOUT = 3000; // in ms
 
 
 export abstract class Service<T> extends EventEmitter {
 	public readonly name: string = "Service";
 	public readonly device: Device;
-	//private _deviceId: DeviceId = null;
-	//public socket: Socket = null;
-
 	protected sockets: Map<DeviceIdString, Socket> = new Map();
 	protected deviceIds: Map<IpAddressPort, DeviceId> = new Map();
 	protected isBufferedService: boolean = true;
 	protected timeout: NodeJS.Timer;
-	//private messageBuffer: Buffer = null;
 	private server: Server = null;
 	private socketBuffers: Map<IpAddressPort, Buffer> = new Map()
 
@@ -31,17 +26,8 @@ export abstract class Service<T> extends EventEmitter {
 	 */
 	constructor(deviceId?: DeviceId) {
 		super();
-		//this._deviceId = deviceId || null;
 		this.device = (deviceId ? StageLinq.devices.device(deviceId) : null);
 	}
-
-	// get deviceId(): DeviceId {
-	// 	return this._deviceId || new DeviceId('00000000-0000-0000-0000-000000000000')
-	// }
-
-	// set deviceId(deviceId: DeviceId) {
-	// 	this._deviceId = deviceId
-	// }
 
 	get serverInfo(): AddressInfo {
 		return this.server.address() as AddressInfo
@@ -67,11 +53,7 @@ export abstract class Service<T> extends EventEmitter {
 
 			const server = CreateServer((socket) => {
 				Logger.debug(`[${this.name}] connection from ${socket.remoteAddress}:${socket.remotePort}`)
-
-				//clearTimeout(this.timeout);
 				this.socketBuffers.set(this.addressPort(socket), null)
-				//this.socket = socket;
-				//if (this.name !== "Directory") this.emit('connection', this.name, this.deviceId)
 
 				socket.on('error', (err) => reject(err));
 				socket.on('data', async (data) => await this.dataHandler(data, socket));
@@ -79,10 +61,6 @@ export abstract class Service<T> extends EventEmitter {
 			}).listen(0, '0.0.0.0', () => {
 				this.server = server;
 				Logger.silly(`opened ${this.name} server on ${this.serverInfo.port}`);
-				// if (this.deviceId) {
-				// 	Logger.silly(`started timer for ${this.name} for ${this.deviceId.string}`)
-				// 	//this.timeout = setTimeout(this.closeService, 8000, this);
-				// };
 				resolve(server);
 			});
 		});
@@ -109,51 +87,24 @@ export abstract class Service<T> extends EventEmitter {
 		}
 	}
 
-	// private async subMessageTest(buff: Buffer): Promise<boolean> {
-	// 	try {
-	// 		const msg = buff.readInt32BE();
-	// 		const deviceId = buff.slice(4);
-	// 		if (msg === 0 && deviceId.length === 16) {
-	// 			return true
-	// 		} else {
-	// 			return false
-	// 		}
-	// 	} catch {
-	// 		return false
-	// 	}
-	// }
-
 	private subMessageTest(ctx: ReadContext): boolean {
 		try {
 			if (ctx.sizeLeft() < 22) return
-
-			//try {
 			const msg = ctx.readUInt32();
 			if (msg !== 0) return
 			ctx.read(16);
 			if (ctx.sizeLeft() < 4) return
-
 			const length = ctx.readUInt32();
-			//console.log(length, ctx.copy().readRemainingAsNewBuffer())
 			if (length > ctx.sizeLeft()) return
 			ctx.seek(-4)
 			const service = ctx.readNetworkStringUTF16();
 			const services: string[] = [...StageLinq.options.services]
-
-
 			if (!services.includes(service)) return
 			if (this.name !== service) return
-
-			// if (msg === 0 && services.includes(service) && this.name === service) {
-			// 	console.info(msg, this.name, service)
-			// 	return true
-			// } else {
 			return true
 		} catch (err) {
 			Logger.error(this.name, err)
 		}
-
-		//}
 	}
 
 	protected addressPort(socket: Socket): IpAddressPort {
@@ -172,11 +123,9 @@ export abstract class Service<T> extends EventEmitter {
 			buffer = data;
 		}
 		this.socketBuffers.set(this.addressPort(socket), null)
-		//this.messageBuffer = null
-		//console.log('data length', data.length, 'buffer length', buffer.length)
 		const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 		const ctx = new ReadContext(arrayBuffer, false)
-		//console.info(ctx.sizeLeft());
+
 		return ctx
 	}
 
@@ -194,13 +143,7 @@ export abstract class Service<T> extends EventEmitter {
 			return
 		};
 
-		//const n_ctx = ctx.copy();
-		//n_ctx.rewind()
-
-		//console.log(ctx.sizeLeft())
-
 		if (this.subMessageTest(ctx.copy())) {
-			//console.log(this.name, 'sizeleft', ctx.sizeLeft(), data)
 			try {
 				ctx.read(4)
 				const deviceId = new DeviceId(ctx.read(16));
@@ -215,35 +158,11 @@ export abstract class Service<T> extends EventEmitter {
 			} catch (err) {
 				Logger.error(this.name, socket.remoteAddress, err)
 			}
-
 		}
-
-		// if (await this.subMessageTest(ctx.peek(20))) {
-		// 	console.warn('sizeLeft', n_ctx.sizeLeft(), n_ctx.readRemainingAsNewBuffer())
-		// 	const messageId = ctx.readUInt32();
-		// 	const token = ctx.read(16) // DeviceID
-		// 	//if (!this.deviceId) {
-		// 	const deviceId = new DeviceId(token);
-		// 	Logger.silent(`${this.name} adding DeviceId: ${deviceId.string}`)
-		// 	this.deviceId = deviceId
-		// 	//}
-		// 	// if (ctx.sizeLeft()) {
-		// 	// 	console.log()
-		// 	// }
-		// 	const serviceName = ctx.readNetworkStringUTF16()//ctx.sizeLeft() ? ctx.readRemainingAsNewBuffer() : null;
-		// 	ctx.seek(2);
-		// 	Logger.info(`${messageId}  from ${this.deviceId.string} sizeLeft ${ctx.sizeLeft()} ${serviceName}`);
-		// 	if (this.device) {
-		// 		StageLinq.devices.emit('newService', this.device, this)
-		// 	}
-		// 	this.emit('newDevice', this);
-		// 	//return
-		// }
 
 		try {
 			while (ctx.isEOF() === false) {
 				if (ctx.sizeLeft() < 4) {
-					//this.messageBuffer = ctx.readRemainingAsNewBuffer();
 					this.socketBuffers.set(this.addressPort(socket), ctx.readRemainingAsNewBuffer());
 					break;
 				}
@@ -311,21 +230,6 @@ export abstract class Service<T> extends EventEmitter {
 		return await this.write(newCtx, socket);
 	}
 
-	//
-	/**
-	 * Callback for server timeout timer
-	 * Runs if device doesn't conect to service server
-	 * @param {DeviceId} deviceId
-	 * @param {string} serviceName
-	 * @param {Server} server
-	 * @param {StageLinq} parent
-	 * @param {ServiceHandler} handler
-	 */
-	// protected async closeService(service: Service<T>) {
-	// 	Logger.info(`closing ${service.name} server for ${service.deviceId.string} due to timeout`);
-	// 	service.emit('closingService', service)
-	// 	service.server.close();
-	// }
 
 	protected abstract instanceListener(eventName: string, ...args: any): void
 }

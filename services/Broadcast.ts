@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events';
-//import { strict as assert } from 'assert';
 import { ReadContext } from '../utils';
 import { ServiceMessage, DeviceId } from '../types';
 import { Service } from './Service';
@@ -35,10 +34,8 @@ export class Broadcast extends Service<BroadcastData> {
 	}
 
 	private parseData(ctx: ReadContext, socket: Socket): ServiceMessage<BroadcastData> {
-		//const deviceId = this.getDeviceId(socket);
 		const length = ctx.readUInt32();
 
-		//assert(deviceId.string === msgDeviceId.string)
 		if (!length && ctx.sizeLeft()) {
 			const deviceId = new DeviceId(ctx.read(16))
 

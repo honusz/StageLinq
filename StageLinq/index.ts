@@ -24,11 +24,6 @@ export class StageLinq {
 	private static _status: Status = null;
 	private static _directory: Directory = null;
 	static services: Map<string, InstanceType<typeof Service>> = new Map();
-	// fileTransfer: FileTransfer = null;
-	// stateMap: StateMap = null;
-	// beatInfo: BeatInfo = null;
-	// broadcast: Broadcast = null;
-	// timeSync: TimeSynchronization = null;
 	static fileTransfer: FileTransfer = null;
 	static stateMap: StateMap = null;
 	static beatInfo: BeatInfo = null;
@@ -134,12 +129,7 @@ export class StageLinq {
 
 		//Directory is required
 		StageLinq.directory = await StageLinq.startServiceListener(Directory);
-		// if (StageLinq.options.services.includes(Services.FileTransfer)) this.fileTransfer = await StageLinq.startServiceListener(FileTransfer);
-		// if (StageLinq.options.services.includes(Services.StateMap)) this.stateMap = await StageLinq.startServiceListener(StateMap);
-		// if (StageLinq.options.services.includes(Services.BeatInfo)) this.beatInfo = await StageLinq.startServiceListener(BeatInfo);
-		// if (StageLinq.options.services.includes(Services.Broadcast)) this.broadcast = await StageLinq.startServiceListener(Broadcast);
-		// if (StageLinq.options.services.includes(Services.TimeSynchronization)) this.timeSync = await StageLinq.startServiceListener(TimeSynchronization);
-		//  Announce myself with Directory port
+
 		await StageLinq.discovery.announce(StageLinq.directory.serverInfo.port);
 	}
 
@@ -153,7 +143,6 @@ export class StageLinq {
 			await StageLinq.directory.stop();
 			const services = await StageLinq.devices.getDeviceServices();
 			for (const service of services) {
-				//Logger.log(`closing ${service.name} on ${service.deviceId.string}`);
 				await service.stop()
 			}
 			await StageLinq.discovery.unannounce();

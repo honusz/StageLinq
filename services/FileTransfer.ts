@@ -2,16 +2,12 @@ import { EventEmitter } from 'events';
 import { strict as assert } from 'assert';
 import { Logger } from '../LogEmitter';
 import { ReadContext, WriteContext, sleep } from '../utils';
-//import * as fs from 'fs';
-//import { Broadcast, BroadcastMessage } from './';
 import { Service } from './Service';
 import { Transfer, File, Dir } from '../Sources/transfers'
 import { ServiceMessage, DeviceId } from '../types';
 import { Source } from '../Sources'
 import { StageLinq } from '../StageLinq';
 import { Socket } from 'net';
-//import { performance } from 'perf_hooks';
-//import { DbConnection } from '../Sources/DbConnection';
 
 //const MESSAGE_TIMEOUT = 5000; // in ms
 //const DOWNLOAD_TIMEOUT = 60000; // in ms
@@ -19,11 +15,6 @@ const MAGIC_MARKER = 'fltx';
 const CHUNK_SIZE = 4096;
 
 type ByteRange = [number, number];
-
-// type DBInfo = {
-// 	id: number;
-// 	uuid: string;
-// }
 
 export interface FileTransferData {
 	txid: number;
@@ -66,13 +57,6 @@ enum Request {
 
 
 
-
-// export declare interface FileTransfer {
-// 	on(event: 'fileTransferProgress', listener: (source: Source, fileName: string, txid: number, progress: FileTransferProgress) => void): this;
-// 	on(event: 'fileTransferComplete', listener: (source: Source, fileName: string, txid: number) => void): this;
-// }
-
-
 export class FileTransfer extends Service<FileTransferData> {
 	public name: string = "FileTransfer";
 	static readonly emitter: EventEmitter = new EventEmitter();
@@ -80,8 +64,6 @@ export class FileTransfer extends Service<FileTransferData> {
 	#isAvailable: boolean = true;
 	private pathCache: Map<string, number> = new Map();
 	private transfers: Map<number, Dir | File> = new Map();
-	//private sourceDir: Dir = null;
-	// private static socketMap: Map<string, Socket> = new Map()
 
 	/**
 	 * FileTransfer Service Class
@@ -127,7 +109,6 @@ export class FileTransfer extends Service<FileTransferData> {
 		const txId = ctx.readUInt32();
 		const messageId: Response | Request = ctx.readUInt32();
 		const deviceId = this.getDeviceId(socket);
-		//if (this.deviceId.string !== deviceId.string) Logger.warn(`deviceId mismatch! ${this.deviceId.string} ${deviceId.string}`);
 
 		let message: ServiceMessage<FileTransferData> = {
 			id: messageId,
@@ -318,9 +299,7 @@ export class FileTransfer extends Service<FileTransferData> {
 		remotePath = `/${pathSplit.join('/')}`
 		const socket = this.sockets.get(deviceId.string)
 		const thisFile = await this.fileRequest(socket, remotePath) as File;
-		//if (localPath) thisFile.localPath = localPath;
-		//await thisFile.downloadFile()
-		//if (signalComplete) this.signalTransferComplete(socket, thisFile.txid)
+
 		return thisFile
 	}
 
@@ -331,10 +310,8 @@ export class FileTransfer extends Service<FileTransferData> {
 	private async firstMessage(message: ServiceMessage<FileTransferData>) {
 		const { ...data } = message.message
 		Logger.debug(`First Message! ${this.getDeviceId(message.socket).string} ${message.deviceId.string} `, data)
-		//Logger.log()
 		const transfer = await this.dirRequest(message.socket, `/`) as Dir;
 		const sources = [...transfer.directories]
-
 
 		let promiseArray: Promise<File>[] = []
 		for (const source of sources) {
@@ -344,10 +321,8 @@ export class FileTransfer extends Service<FileTransferData> {
 					const newDir = await this.dirRequest(message.socket, `/${source}/Engine Library/Database2`) as Dir;
 
 					const fileStat = await this.fileRequest(message.socket, `/${source}/Engine Library/Database2/hm.db`) as File;
-					//const fileStat = await this.fileStatRequest(`/${source}/Engine Library/Database2/hm.db`) as File
-					const thisSource = new Source(source, message.deviceId, newDir);
 
-					//Logger.warn(`downloading to ${fileStat.localPath}`)
+					const thisSource = new Source(source, message.deviceId, newDir);
 					await fileStat.downloadFile();
 					thisSource.newDatabase(fileStat);
 					StageLinq.sources.setSource(thisSource);
@@ -360,10 +335,7 @@ export class FileTransfer extends Service<FileTransferData> {
 			promiseArray.push(promise)
 
 		}
-		Promise.all(promiseArray)
-		// if (this.getDeviceId(message.socket).string == '1e6c417a-b674-4c87-b4aa-fb7ad2298976') {
-		// 	await this.getFile('net://1e6c417a-b674-4c87-b4aa-fb7ad2298976/DJ2 (USB 1)/Engine Library/Music/Vakabular/Best Of Phobos Seven Years/16304217_First Time_(Original Mix) (3).mp3')
-		// }
+		Promise.all(promiseArray);
 	}
 
 	private getOrNewTransfer(socket: Socket, path: string, T: typeof Transfer): Dir | File {

@@ -6,7 +6,6 @@ import { sleep, WriteContext, ReadContext } from '../utils';
 import { Socket, RemoteInfo, createSocket } from 'dgram';
 import { subnet } from 'ip';
 import { networkInterfaces } from 'os';
-//const hash = require('crypto').createHash;
 import { createHash } from 'crypto';
 
 const ANNOUNCEMENT_INTERVAL = 1000;
@@ -35,7 +34,6 @@ export class Discovery extends EventEmitter {
 	private peers: Map<DeviceIdString, ConnectionInfo> = new Map();
 	private deviceId: DeviceId = null;
 	private announceTimer: NodeJS.Timer;
-	//private infoHashes: Map<string, co
 	private infoHashes: Set<string> = new Set();
 
 	/**
@@ -149,10 +147,6 @@ export class Discovery extends EventEmitter {
 				assert(ctx.tell() === remote.size);
 				callback(result);
 			}
-			//const hash = createHash('sha256')
-			//hash.update(announcement)
-			//Logger.log(hash.digest('base64'))
-
 		});
 		this.socket.bind({
 			port: LISTEN_PORT,

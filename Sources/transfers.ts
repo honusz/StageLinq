@@ -54,21 +54,14 @@ export abstract class Transfer extends EventEmitter {
     readonly txid: number;
     readonly remotePath: string;
     protected _deviceId: DeviceId = null;
-    //service: FileTransfer;
     socket: Socket = null
 
     constructor(socket: Socket, path: string,) {
         super();
-        //this.service = service;
         this.remotePath = path;
         this.socket = socket;
         this._deviceId = StageLinq.fileTransfer.getDeviceId(socket)
         this.txid = StageLinq.fileTransfer.newTxid();
-
-
-        // const splitPath = path.substring(1).split('/')
-        //this._deviceId = new DeviceId(splitPath.shift())
-        // this.remotePath = `/${splitPath.join('/')}`
     }
 
     get deviceId(): DeviceId {
@@ -294,15 +287,11 @@ export class File extends Transfer {
             startTime: file.downloadStartTime,
             elapsed: ((performance.now() - file.downloadStartTime) / 1000)
         }
-
-        //const progress = Math.ceil((tx.chunksReceived / tx.chunks) * 100);
-        //return progress
     }
 
     async downloadFile(_localPath?: string): Promise<number> {
 
         const localPath = _localPath || this.localPath
-        //Logger.log(`${this.service.deviceId.string} downloading ${this.chunks} chunks to local path: ${localPath}`)
         this.fileStream = fs.createWriteStream(`${localPath}`);
         this.downloadStartTime = performance.now();
         const txProgress = setInterval(() => {
@@ -311,7 +300,6 @@ export class File extends Transfer {
         this.service.requestFileChunk(this.socket, this.txid, 0, this.chunks - 1);
 
         while (this.size > this.fileStream.bytesWritten) {
-            //Logger.info(this.size, this.fileStream.bytesWritten)
             await sleep(250)
         }
         const endTime = performance.now();

@@ -63,7 +63,6 @@ export interface StateData {
 export class StateMap extends Service<StateData> {
 	public readonly name = "StateMap";
 	static readonly emitter: EventEmitter = new EventEmitter();
-	//static #instances: Map<string, StateMap> = new Map()
 
 	/**
 	 * StateMap Service Class
@@ -73,8 +72,7 @@ export class StateMap extends Service<StateData> {
 	 * @param {DeviceId} deviceId
 	 */
 	constructor(deviceId: DeviceId) {
-		super(deviceId)
-		//StateMap.#instances.set(this.deviceId.string, this)
+		super(deviceId);
 		this.addListener('newDevice', (deviceId: DeviceId, service: StateMap) => this.instanceListener('newDevice', deviceId, service))
 		this.addListener('newDevice', (deviceId: DeviceId, service: StateMap) => StageLinq.status.addDecks(deviceId, service))
 		this.addListener('stateMessage', (data: StateData) => this.instanceListener('stateMessage', data))
@@ -121,7 +119,6 @@ export class StateMap extends Service<StateData> {
 
 
 	protected parseData(ctx: ReadContext, socket: Socket): ServiceMessage<StateData> {
-		//assert(this.deviceId);
 
 		const marker = ctx.getString(4);
 		if (marker !== MAGIC_MARKER) {
@@ -129,7 +126,6 @@ export class StateMap extends Service<StateData> {
 		}
 		assert(marker === MAGIC_MARKER);
 		const deviceId = this.getDeviceId(socket)
-		//if (this.deviceId.string !== deviceId.string) Logger.warn(`deviceId mismatch! ${this.deviceId.string} ${deviceId.string}`);
 
 		const type = ctx.readUInt32();
 		switch (type) {

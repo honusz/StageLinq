@@ -48,7 +48,6 @@ export class BeatInfo extends Service<BeatData> {
 
 	constructor(deviceId?: DeviceId) {
 		super(deviceId)
-		//BeatInfo.#instances.set(this.deviceId.string, this)
 		this.addListener('connection', () => this.instanceListener('newDevice', this));
 		this.addListener('beatMessage', (data: BeatData) => this.instanceListener('beatMessage', data));
 		this.addListener(`data`, (ctx: ReadContext, socket: Socket) => this.parseData(ctx, socket));
@@ -183,5 +182,4 @@ export class BeatInfo extends Service<BeatData> {
 		}
 		this.#currentBeatData.set(data.deviceId.string, data);
 	}
-
 }

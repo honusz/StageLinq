@@ -4,9 +4,6 @@ import { Source } from '../Sources'
 import { sleep } from '../utils/sleep';
 import { StageLinq } from '../StageLinq';
 import { Logger } from '../LogEmitter';
-//import * as fs from 'fs';
-// import * as os from 'os';
-// import * as Path from 'path';
 
 require('console-stamp')(console, {
 	format: ':date(HH:MM:ss) :label',
@@ -23,39 +20,6 @@ function progressBar(size: number, bytes: number, total: number): string {
 	}
 	return `[${progressArrary.join('')}]`
 }
-
-// async function getTrackInfo(sourceName: string, deviceId: DeviceId, trackName: string) {
-//   while (!StageLinq.sources.hasSourceAndDB(sourceName, deviceId)) {
-//     await sleep(1000);
-//   }
-//   try {
-//     const source = StageLinq.sources.getSource(sourceName, deviceId);
-//     const connection = source.getDatabase().connection;
-//     const result = await connection.getTrackInfo(trackName);
-//     connection.close();
-//     return result;
-//   } catch (e) {
-//     console.error(e);
-//   }
-// }
-
-// async function downloadFile(sourceName: string, deviceId: DeviceId, path: string, dest?: string) {
-// 	while (!StageLinq.sources.hasSource(sourceName, deviceId)) {
-// 		await sleep(250)
-// 	}
-// 	try {
-// 		const source = StageLinq.sources.getSource(sourceName, deviceId);
-// 		const data = await source.downloadFile(path, dest);
-// 		// if (dest && data) {
-// 		// 	const filePath = `${dest}/${path.split('/').pop()}`
-// 		// 	fs.writeFileSync(filePath, Buffer.from(data));
-// 		// }
-// 		console.log(`Downloaded ${data.fileName} to ${data.localPath}`)
-// 	} catch (e) {
-// 		console.error(`Could not download ${path}`);
-// 		console.error(e)
-// 	}
-// }
 
 
 async function main() {
@@ -146,15 +110,10 @@ async function main() {
 			console.log(`[BROADCAST] ${deviceId.string} ${name}`, value);
 			const db = StageLinq.sources.getDBByUuid(value.databaseUuid);
 			if (db) {
-				//const connection = await db[0].open();
-
 				const track = await db.getTrackById(value.trackId);
-				//connection.close();
-				//db[0].close();
 				console.log('[BROADCAST] Track Changed:', track);
 			}
 		})
-
 	}
 
 
@@ -168,10 +127,7 @@ async function main() {
 				const track = StageLinq.status.getTrack(data.deviceId, deck);
 				console.log(`Now Playing: `, track);
 				if (stageLinqOptions.services.includes(Services.FileTransfer) && StageLinq.options.downloadDbSources) {
-					//const fileTransfer = StageLinq.services.get('FileTransfer') as FileTransfer;
-					// downloadFile(track.source.name, track.source.location, track.source.path, Path.resolve(os.tmpdir()));
 					const file = await stageLinq.fileTransfer.getFileInfo(track.TrackNetworkPath);
-					//console.info(file.size)
 					await file.downloadFile()
 				}
 			}
