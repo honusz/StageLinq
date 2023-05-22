@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { Logger } from '../LogEmitter';
 import { strict as assert } from 'assert';
-import { ConnectionInfo, DiscoveryMessage, DiscoveryMessageOptions, IpAddress, Units, DeviceId } from '../types';
+import { ConnectionInfo, DiscoveryMessage, DiscoveryMessageOptions, IpAddress, Units, DeviceId, DeviceIdString } from '../types';
 import { sleep, WriteContext, ReadContext } from '../utils';
 import { Socket, RemoteInfo, createSocket } from 'dgram';
 import { subnet } from 'ip';
@@ -32,7 +32,7 @@ export class Discovery extends EventEmitter {
 	private address: IpAddress;
 	private broadcastAddresses: IpAddress[];
 	private options: DiscoveryMessageOptions = null;
-	private peers: Map<string, ConnectionInfo> = new Map();
+	private peers: Map<DeviceIdString, ConnectionInfo> = new Map();
 	private deviceId: DeviceId = null;
 	private announceTimer: NodeJS.Timer;
 	//private infoHashes: Map<string, co
@@ -142,16 +142,16 @@ export class Discovery extends EventEmitter {
 			if (!this.infoHashes.has(hash)) {
 				this.infoHashes.add(hash)
 				const ctx = new ReadContext(announcement.buffer, false);
-				const result = this.readConnectionInfo(ctx, remote.address);
+				const result = this.readConnectionInfo(ctx, remote.address as IpAddress);
 				if (!this.address) {
-					this.address = remote.address;
+					this.address = remote.address as IpAddress;
 				}
 				assert(ctx.tell() === remote.size);
 				callback(result);
 			}
 			//const hash = createHash('sha256')
 			//hash.update(announcement)
-			//console.log(hash.digest('base64'))
+			//Logger.log(hash.digest('base64'))
 
 		});
 		this.socket.bind({
@@ -238,16 +238,16 @@ export class Discovery extends EventEmitter {
 	 * Get list of Broadcast-enabled Network Interfaces
 	 * @returns {SubnetInfo[]} Array of Broadcast IPs
 	 */
-	private findBroadcastIPs(): string[] {
+	private findBroadcastIPs(): IpAddress[] {
 		const interfaces = Object.values(networkInterfaces());
 		assert(interfaces.length);
-		const ips = [];
+		const ips: IpAddress[] = [];
 		for (const i of interfaces) {
 			assert(i && i.length);
 			for (const entry of i) {
 				if (entry.family === 'IPv4' && entry.internal === false) {
 					const info = subnet(entry.address, entry.netmask);
-					ips.push(info.broadcastAddress);
+					ips.push(info.broadcastAddress as IpAddress);
 				}
 			}
 		}

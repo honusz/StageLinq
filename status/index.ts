@@ -1,11 +1,12 @@
 import { EventEmitter } from 'events';
 import { StageLinq } from '../StageLinq';
 import { StateData, StateMap } from '../services';
-import { Track, DeviceId, ServiceMessage } from '../types';
+import { Track, DeviceId, ServiceMessage, DeviceIdString } from '../types';
+import { sleep } from '../utils';
 
 
 export class Status extends EventEmitter {
-	private tracks: Map<string, Track> = new Map();
+	private tracks: Map<DeviceIdString, Track> = new Map();
 
 	/**
 	 * Status EndPoint Class
@@ -26,17 +27,21 @@ export class Status extends EventEmitter {
 	 * @param {StateMap} service // Instance of StateMap Service
 	 * @param {number} deck Deck (layer) number
 	 */
-	async addDeck(service: StateMap, deck: number) {
-		let track = new Track(`/Engine/Deck${deck}/Track/`)
-		this.tracks.set(`{${service.deviceId.string}},${deck}`, track)
+	async addDeck(deviceId: DeviceId, service: StateMap, deck: number) {
+		let track = new Track(`${deviceId.string}/Engine/Deck${deck}/Track/`)
+		this.tracks.set(`{${deviceId.string}},${deck}`, track)
 		for (let item of Object.keys(track)) {
 			service.addListener(`${track.prefix}${item}`, data => this.listener(data, this))
 		}
 	}
 
-	async addDecks(service: StateMap) {
-		for (let i = 1; i <= StageLinq.devices.device(service.deviceId).deckCount(); i++) {
-			this.addDeck(service, i);
+	async addDecks(deviceId: DeviceId, service: StateMap) {
+		while (!StageLinq.devices.hasDevice(deviceId)) {
+			await sleep(250)
+		}
+
+		for (let i = 1; i <= StageLinq.devices.device(deviceId).deckCount(); i++) {
+			this.addDeck(deviceId, service, i);
 		}
 	}
 

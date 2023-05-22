@@ -3,13 +3,25 @@ import { WriteContext, sleep, getTempFilePath } from '../utils';
 import * as fs from 'fs';
 import { FileTransfer, FileTransferData } from '../services';
 import { ServiceMessage, DeviceId } from '../types';
+import { Logger } from '../LogEmitter';
 import { performance } from 'perf_hooks';
+import { Socket } from 'net';
+import { StageLinq } from '../StageLinq';
 
 const DOWNLOAD_TIMEOUT = 60000; // in ms
 const MAGIC_MARKER = 'fltx';
 const CHUNK_SIZE = 4096;
 
 type ByteRange = [number, number];
+
+export interface FileTransferProgress {
+    sizeLeft: number;
+    total: number;
+    bytesDownloaded: number;
+    percentComplete: number;
+    startTime: number;
+    elapsed: number;
+}
 
 enum Response {
     TimeCode = 0x0,
@@ -41,17 +53,30 @@ enum Request {
 export abstract class Transfer extends EventEmitter {
     readonly txid: number;
     readonly remotePath: string;
-    service: FileTransfer;
+    protected _deviceId: DeviceId = null;
+    //service: FileTransfer;
+    socket: Socket = null
 
-    constructor(service: FileTransfer, path: string,) {
+    constructor(socket: Socket, path: string,) {
         super();
-        this.service = service;
+        //this.service = service;
         this.remotePath = path;
-        this.txid = service.newTxid();
+        this.socket = socket;
+        this._deviceId = StageLinq.fileTransfer.getDeviceId(socket)
+        this.txid = StageLinq.fileTransfer.newTxid();
+
+
+        // const splitPath = path.substring(1).split('/')
+        //this._deviceId = new DeviceId(splitPath.shift())
+        // this.remotePath = `/${splitPath.join('/')}`
     }
 
     get deviceId(): DeviceId {
-        return this.service.deviceId
+        return this._deviceId
+    }
+
+    get service(): FileTransfer {
+        return StageLinq.fileTransfer
     }
 
     getNewMessage(command?: number): WriteContext {
@@ -66,7 +91,7 @@ export abstract class Transfer extends EventEmitter {
 
         const id = Request[data.id] || Response[data.id]
         const { ...message } = data.message;
-        if (id !== "FileChunk") console.warn(`TXID:${message.txid} ${data.deviceId.string} ${this.remotePath} ${id}`, message);
+        if (id !== "FileChunk") Logger.debug(`TXID:${message.txid} ${data.deviceId.string} ${this.remotePath} ${id}`, message);
         this.emit(id, data)
         this.handler(data)
 
@@ -83,8 +108,8 @@ export class Dir extends Transfer {
     directories: Set<string> = new Set();
 
 
-    constructor(service: FileTransfer, path: string) {
-        super(service, path);
+    constructor(socket: Socket, path: string) {
+        super(socket, path);
     }
 
     protected handler(data: ServiceMessage<FileTransferData>): void {
@@ -115,18 +140,23 @@ export class File extends Transfer {
     localPath: string = null;
     isDownloaded: boolean = false;
     isOpen: boolean = false;
+    hasPendingUpdate: boolean = false;
     private fileStream: fs.WriteStream = null;
     private chunks: number = null;
     private chunksReceived: number = 0;
     private chunkUpdates: ByteRange[][] = [];
     private chunkUpdateBusy: boolean = false;
     private chunkSessionNumber = 0;
+    private chunksToUpdate = 0
+    private chunksUpdated = 0
+    private chunkUpdatesPending = 0
     private chunkBuffer: Buffer[] = [];
     private chunkCheck: boolean[] = [];
+    private downloadStartTime: number = 0.0;
 
 
-    constructor(service: FileTransfer, path: string, localPath?: string) {
-        super(service, path);
+    constructor(socket: Socket, path: string, localPath?: string) {
+        super(socket, path);
         this.localPath = localPath || getTempFilePath(`${this.source}/${this.fileName}`);
     }
 
@@ -139,10 +169,22 @@ export class File extends Transfer {
         return this.remotePath.split('/').pop()
     }
 
-    async onFileClosed(): Promise<void> {
+    async open(): Promise<string> {
+
+        while (this.hasPendingUpdate) {
+            await sleep(250)
+        }
         while (this.isOpen) {
             await sleep(250)
         }
+        Logger.debug(`${this.fileName} open!`)
+        this.isOpen = true;
+        return this.localPath
+    }
+
+    close() {
+        Logger.debug(`${this.fileName} closed!`)
+        this.isOpen = false;
     }
 
     protected handler(data: ServiceMessage<FileTransferData>): void {
@@ -165,6 +207,8 @@ export class File extends Transfer {
             this.emit(`chunk:${chunk}`, data);
         }
         if (data.id === Response.DataUpdate) {
+            this.hasPendingUpdate = true;
+            this.chunksToUpdate += message.byteRange.length
             this.chunkUpdates.push(message.byteRange);
             this.updateChunkRange();
         }
@@ -194,8 +238,9 @@ export class File extends Transfer {
     }
 
     private async updateChunkRange() {
+        this.chunkUpdatesPending++
         this.chunkSessionNumber++
-        console.info(`updateChunkRange called for ${this.chunkSessionNumber}`)
+        Logger.info(`updateChunkRange called for ${this.chunkSessionNumber}`)
         while (this.chunkUpdateBusy) {
             await sleep(250);
         }
@@ -206,20 +251,28 @@ export class File extends Transfer {
 
         for (const range of byteRange) {
             const chunks = rangeArray(range[0], range[1])
+            this.chunksToUpdate += chunks.length
             for (const chunk of chunks) {
                 const data = await this.getFileChunk(chunk, this.service);
                 const offset = chunk * CHUNK_SIZE;
                 const written = await this.updateFileChunk(this.localPath, data.message.data, offset)
-                console.warn(`Wrote ${written} bytes at offset ${offset}`);
+                this.chunksUpdated++
+                Logger.debug(`Wrote ${written} bytes at offset ${offset}`);
             }
         }
-        if (!this.chunkUpdates.length) console.warn(`${this.fileName} Updated!`)
+        Logger.log(`update progress ${this.chunksUpdated}/${this.chunksToUpdate}`)
+        this.chunkUpdatesPending--
         this.chunkUpdateBusy = false;
+        if (!this.chunkUpdatesPending) {
+            Logger.log(`${this.fileName} Updated! Chunks written ${this.chunksUpdated}`)
+            this.hasPendingUpdate = false;
+        }
+
     }
 
     private async getFileChunk(chunk: number, service: FileTransfer): Promise<ServiceMessage<FileTransferData>> {
         return await new Promise((resolve, reject) => {
-            service.requestFileChunk(this.txid, chunk, chunk);
+            service.requestFileChunk(this.socket, this.txid, chunk, chunk);
             this.on(`chunk:${chunk}`, (data: ServiceMessage<FileTransferData>) => {
                 resolve(data);
             });
@@ -227,27 +280,42 @@ export class File extends Transfer {
         });
     }
 
-    private transferProgress(tx: File): number {
-        const progress = Math.ceil((tx.chunksReceived / tx.chunks) * 100);
-        return progress
+    progressUpdater() {
+        const progress = this.transferProgress();
+        Logger.log(`${this._deviceId.string} TXID:${this.txid} ${this.fileName} ${progress.bytesDownloaded.toLocaleString('en-US')} / ${progress.total.toLocaleString('en-US')} ${progress.percentComplete}% elapsed: ${progress.elapsed.toPrecision(3)} secs`)
     }
 
-    async downloadFile(): Promise<number> {
+    transferProgress(): FileTransferProgress {
+        return {
+            total: this.size,
+            bytesDownloaded: this.chunksReceived * CHUNK_SIZE,
+            sizeLeft: this.size - (this.chunksReceived * CHUNK_SIZE),
+            percentComplete: Math.ceil(this.chunksReceived / this.chunks * 100),
+            startTime: this.downloadStartTime,
+            elapsed: ((performance.now() - this.downloadStartTime) / 1000)
+        }
 
-        const localPath = this.localPath
-        console.log(`${this.service.deviceId.string} downloading ${this.chunks} chunks to local path: ${localPath}`)
+        //const progress = Math.ceil((tx.chunksReceived / tx.chunks) * 100);
+        //return progress
+    }
+
+    async downloadFile(_localPath?: string): Promise<number> {
+
+        const localPath = _localPath || this.localPath
+        //Logger.log(`${this.service.deviceId.string} downloading ${this.chunks} chunks to local path: ${localPath}`)
         this.fileStream = fs.createWriteStream(`${localPath}`);
-        const startTime = performance.now();
-        const txStatus = setInterval(this.transferProgress, 250, this)
-        this.service.requestFileChunk(this.txid, 0, this.chunks - 1);
-        const endTime = performance.now();
+        this.downloadStartTime = performance.now();
+        const txStatus = setInterval(this.progressUpdater.bind(this), 250)
+        this.service.requestFileChunk(this.socket, this.txid, 0, this.chunks - 1);
+
         while (this.size > this.fileStream.bytesWritten) {
-            console.info(this.size, this.fileStream.bytesWritten)
+            //Logger.info(this.size, this.fileStream.bytesWritten)
             await sleep(250)
         }
+        const endTime = performance.now();
         clearInterval(txStatus);
 
-        console.log(`complete! in ${(endTime - startTime) / 1000}`, this.deviceId.string, this.fileName, this.fileStream.bytesWritten, this.size)
+        Logger.log(`TXID: ${this.txid} completed in ${((endTime - this.downloadStartTime) / 1000).toPrecision(3)} secs`, this.deviceId.string, this.fileName, this.fileStream.bytesWritten.toLocaleString('en-US'), this.size.toLocaleString('en-US'))
         this.fileStream.end();
         this.isDownloaded = true;
         return this.fileStream.bytesWritten;

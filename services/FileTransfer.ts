@@ -65,17 +65,12 @@ enum Request {
 }
 
 
-export interface FileTransferProgress {
-	sizeLeft: number;
-	total: number;
-	bytesDownloaded: number;
-	percentComplete: number;
-}
 
-export declare interface FileTransfer {
-	on(event: 'fileTransferProgress', listener: (source: Source, fileName: string, txid: number, progress: FileTransferProgress) => void): this;
-	on(event: 'fileTransferComplete', listener: (source: Source, fileName: string, txid: number) => void): this;
-}
+
+// export declare interface FileTransfer {
+// 	on(event: 'fileTransferProgress', listener: (source: Source, fileName: string, txid: number, progress: FileTransferProgress) => void): this;
+// 	on(event: 'fileTransferComplete', listener: (source: Source, fileName: string, txid: number) => void): this;
+// }
 
 
 export class FileTransfer extends Service<FileTransferData> {
@@ -86,7 +81,7 @@ export class FileTransfer extends Service<FileTransferData> {
 	private pathCache: Map<string, number> = new Map();
 	private transfers: Map<number, Dir | File> = new Map();
 	//private sourceDir: Dir = null;
-	private static socketMap: Map<string, Socket> = new Map()
+	// private static socketMap: Map<string, Socket> = new Map()
 
 	/**
 	 * FileTransfer Service Class
@@ -95,16 +90,16 @@ export class FileTransfer extends Service<FileTransferData> {
 	 */
 	constructor(deviceId?: DeviceId) {
 		super(deviceId)
-		this.addListener('newDevice', (service: FileTransfer) => this.instanceListener('newDevice', service))
+		this.addListener('newDevice', (deviceId: DeviceId, service: FileTransfer) => this.instanceListener('newDevice', deviceId, service))
 		this.addListener('newSource', (source: Source) => this.instanceListener('newSource', source))
 		this.addListener('sourceRemoved', (name: string, deviceId: DeviceId) => this.instanceListener('newSource', name, deviceId))
-		this.addListener('fileTransferProgress', (source: Source, fileName: string, txid: number, progress: FileTransferProgress) => this.instanceListener('fileTransferProgress', source, fileName, txid, progress))
-		this.addListener('fileTransferComplete', (source: Source, fileName: string, txid: number) => this.instanceListener('fileTransferComplete', source, fileName, txid));
-		this.addListener(`data`, (ctx: ReadContext) => this.parseData(ctx));
+		//this.addListener('fileTransferProgress', (source: Source, fileName: string, txid: number, progress: FileTransferProgress) => this.instanceListener('fileTransferProgress', source, fileName, txid, progress))
+		//this.addListener('fileTransferComplete', (source: Source, fileName: string, txid: number) => this.instanceListener('fileTransferComplete', source, fileName, txid));
+		this.addListener(`data`, (ctx: ReadContext, socket: Socket) => this.parseData(ctx, socket));
 		//this.addListener(`message`, (message: ServiceMessage<FileTransferData>) => this.messageHandler(message));
 		this.addListener(`txId:0`, (message: ServiceMessage<FileTransferData>) => this.firstMessage(message));
-		this.addListener(`msgId:${Request.DirInfo.toString()}`, (message: ServiceMessage<FileTransferData>) => this.sendNoSourcesReply(message.message));
-		this.addListener('newDevice', (service: FileTransfer) => FileTransfer.socketMap.set(service.deviceId.string, service.socket))
+		this.addListener(`msgId:${Request.DirInfo.toString()}`, (message: ServiceMessage<FileTransferData>) => this.sendNoSourcesReply(message));
+		//this.addListener('newDevice', (service: FileTransfer) => FileTransfer.socketMap.set(service.deviceId.string, service.socket))
 	}
 
 	/**
@@ -122,7 +117,7 @@ export class FileTransfer extends Service<FileTransferData> {
 
 	}
 
-	private parseData(ctx: ReadContext): ServiceMessage<FileTransferData> {
+	private parseData(ctx: ReadContext, socket: Socket): ServiceMessage<FileTransferData> {
 
 		const check = ctx.getString(4);
 		if (check !== MAGIC_MARKER) {
@@ -131,11 +126,14 @@ export class FileTransfer extends Service<FileTransferData> {
 
 		const txId = ctx.readUInt32();
 		const messageId: Response | Request = ctx.readUInt32();
+		const deviceId = this.getDeviceId(socket);
+		//if (this.deviceId.string !== deviceId.string) Logger.warn(`deviceId mismatch! ${this.deviceId.string} ${deviceId.string}`);
 
 		let message: ServiceMessage<FileTransferData> = {
 			id: messageId,
 			service: this,
-			deviceId: this.deviceId,
+			socket: socket,
+			deviceId: deviceId,
 			message: {
 				txid: txId,
 			}
@@ -208,7 +206,7 @@ export class FileTransfer extends Service<FileTransferData> {
 				assert(ctx.readUInt32() === 0x0);
 				const filesize = ctx.readUInt32();
 				const id = ctx.readUInt32();
-				assert(id === 1)
+				if (id !== 1) Logger.warn(`fileInfo weirdness ${id} size: ${filesize}`)
 
 				message.message = {
 					size: filesize,
@@ -311,11 +309,18 @@ export class FileTransfer extends Service<FileTransferData> {
 	}
 
 
-	async getFile(remotePath: string, signalComplete?: boolean): Promise<File> {
-		const thisFile = await this.fileRequest(remotePath) as File;
+	async getFileInfo(_remotePath: string): Promise<File> {
+
+		let remotePath = _remotePath;
+		if (remotePath.substring(0, 6) === 'net://') remotePath = _remotePath.substring(6)
+		const pathSplit = remotePath.split('/')
+		const deviceId = new DeviceId(pathSplit.shift())
+		remotePath = `/${pathSplit.join('/')}`
+		const socket = this.sockets.get(deviceId.string)
+		const thisFile = await this.fileRequest(socket, remotePath) as File;
 		//if (localPath) thisFile.localPath = localPath;
-		await thisFile.downloadFile()
-		if (signalComplete) this.signalTransferComplete(thisFile.txid)
+		//await thisFile.downloadFile()
+		//if (signalComplete) this.signalTransferComplete(socket, thisFile.txid)
 		return thisFile
 	}
 
@@ -325,67 +330,79 @@ export class FileTransfer extends Service<FileTransferData> {
 
 	private async firstMessage(message: ServiceMessage<FileTransferData>) {
 		const { ...data } = message.message
-		console.warn(`First Message! ${message.deviceId.string} `, data)
-
-		const transfer = await this.dirRequest('') as Dir;
+		Logger.debug(`First Message! ${this.getDeviceId(message.socket).string} ${message.deviceId.string} `, data)
+		//Logger.log()
+		const transfer = await this.dirRequest(message.socket, `/`) as Dir;
 		const sources = [...transfer.directories]
 
 
+		let promiseArray: Promise<File>[] = []
 		for (const source of sources) {
-			try {
-				const sourceDir = await this.dirRequest(`/${source}`) as Dir;
-				const newDir = await this.dirRequest(`/${source}/Engine Library/Database2`) as Dir;
+			const promise = new Promise<File>(async (resolve, reject) => {
+				try {
+					await this.dirRequest(message.socket, `/${source}`) as Dir;
+					const newDir = await this.dirRequest(message.socket, `/${source}/Engine Library/Database2`) as Dir;
 
-				const fileStat = await this.fileRequest(`/${source}/Engine Library/Database2/hm.db`) as File;
-				//const fileStat = await this.fileStatRequest(`/${source}/Engine Library/Database2/hm.db`) as File
-				const thisSource = new Source(source, this.deviceId, newDir);
+					const fileStat = await this.fileRequest(message.socket, `/${source}/Engine Library/Database2/hm.db`) as File;
+					//const fileStat = await this.fileStatRequest(`/${source}/Engine Library/Database2/hm.db`) as File
+					const thisSource = new Source(source, message.deviceId, newDir);
 
-				console.warn(`downloading to ${fileStat.localPath}`)
-				await fileStat.downloadFile();
-				thisSource.newDatabase(fileStat);
-				StageLinq.sources.setSource(thisSource);
+					//Logger.warn(`downloading to ${fileStat.localPath}`)
+					await fileStat.downloadFile();
+					thisSource.newDatabase(fileStat);
+					StageLinq.sources.setSource(thisSource);
+					resolve(fileStat)
 
-			} catch (err) {
-				console.error(source, err)
-			}
+				} catch (err) {
+					reject(err)
+				}
+			});
+			promiseArray.push(promise)
+
 		}
+		Promise.all(promiseArray)
+		// if (this.getDeviceId(message.socket).string == '1e6c417a-b674-4c87-b4aa-fb7ad2298976') {
+		// 	await this.getFile('net://1e6c417a-b674-4c87-b4aa-fb7ad2298976/DJ2 (USB 1)/Engine Library/Music/Vakabular/Best Of Phobos Seven Years/16304217_First Time_(Original Mix) (3).mp3')
+		// }
 	}
 
-	private getOrNewTransfer(path: string, T: typeof Transfer): Dir | File {
-		if (this.pathCache.has(path)) {
-			return this.transfers.get(this.pathCache.get(path))
+	private getOrNewTransfer(socket: Socket, path: string, T: typeof Transfer): Dir | File {
+		const deviceId = this.getDeviceId(socket)
+		const fullPath = `${deviceId.string}/${path}`
+		if (this.pathCache.has(fullPath)) {
+			return this.transfers.get(this.pathCache.get(fullPath))
 		} else {
-			const transfer = (T === Dir) ? new Dir(this, path) : new File(this, path)
+			const transfer = (T === Dir) ? new Dir(socket, path) : new File(socket, path)
 			this.transfers.set(transfer.txid, transfer);
-			this.pathCache.set(path, transfer.txid);
+			this.pathCache.set(fullPath, transfer.txid);
 			this.addListener(`txId:${transfer.txid.toString()}`, (message) => transfer.listener(message))
 			return transfer
 		}
 	}
 
-	async fileRequest(path: string): Promise<Dir | File> {
+	async fileRequest(socket: Socket, path: string): Promise<Dir | File> {
 		return await new Promise((resolve, reject) => {
-			const transfer = this.getOrNewTransfer(path, File);
+			const transfer = this.getOrNewTransfer(socket, path, File);
 			transfer.on('complete', (tx) => resolve(tx));
-			this.requestFileInfo(path, transfer.txid);
+			this.requestFileInfo(socket, transfer.txid, path);
 			setTimeout(reject, 10000, 'no response');
 		});
 	}
 
-	async fileStatRequest(path: string): Promise<Dir | File> {
+	async fileStatRequest(socket: Socket, path: string): Promise<Dir | File> {
 		return await new Promise((resolve, reject) => {
-			const transfer = this.getOrNewTransfer(path, File);
+			const transfer = this.getOrNewTransfer(socket, path, File);
 			transfer.on('complete', (tx) => resolve(tx));
-			this.requestStat(path, transfer.txid);
+			this.requestStat(socket, transfer.txid, path);
 			setTimeout(reject, 10000, 'no response');
 		});
 	}
 
-	async dirRequest(path: string): Promise<Dir | File> {
+	async dirRequest(socket: Socket, path: string): Promise<Dir | File> {
 		return await new Promise((resolve, reject) => {
-			const transfer = this.getOrNewTransfer(path, Dir);
+			const transfer = this.getOrNewTransfer(socket, path, Dir);
 			transfer.on('complete', (tx) => resolve(tx));
-			this.requestDirInfo(transfer.txid, path);
+			this.requestDirInfo(socket, transfer.txid, path);
 			setTimeout(reject, 10000, 'no response');
 		});
 	}
@@ -394,33 +411,33 @@ export class FileTransfer extends Service<FileTransferData> {
 	 * Request fstat on file from Device
 	 * @param {string} filepath
 	 */
-	async requestStat(filepath: string, txid: number): Promise<void> {
+	async requestStat(socket: Socket, txid: number, filepath: string): Promise<void> {
 		// 0x7d1: seems to request some sort of fstat on a file
 		const ctx = this.getNewMessage(txid, 0x7d1)
 		ctx.writeNetworkStringUTF16(filepath);
-		await this.writeWithLength(ctx);
+		await this.writeWithLength(ctx, socket);
 	}
 
 	/**
 	 * Request current sources attached to device
 	 */
-	async requestDirInfo(txid: number, path?: string): Promise<void> {
+	async requestDirInfo(socket: Socket, txid: number, path?: string): Promise<void> {
 		// 0x7d2: Request available sources
 		const ctx = this.getNewMessage(txid, 0x7d2)
 		path ? ctx.writeNetworkStringUTF16(path) : ctx.writeUInt32(0x0);
-		await this.writeWithLength(ctx);
+		await this.writeWithLength(ctx, socket);
 	}
 
 	/**
 	 * Request TxId for file
 	 * @param {string} filepath
 	 */
-	async requestFileInfo(filepath: string, txid: number): Promise<void> {
+	async requestFileInfo(socket: Socket, txid: number, filepath: string,): Promise<void> {
 		// 0x7d4: Request transfer id?
 		const ctx = this.getNewMessage(txid, 0x7d4)
 		ctx.writeNetworkStringUTF16(filepath);
 		ctx.writeUInt32(0x0); // Not sure why we need 0x0 here
-		await this.writeWithLength(ctx);
+		await this.writeWithLength(ctx, socket);
 	}
 
 	/**
@@ -429,7 +446,7 @@ export class FileTransfer extends Service<FileTransferData> {
 	 * @param {number} chunkStartId
 	 * @param {number} chunkEndId
 	 */
-	async requestFileChunk(txid: number, chunkStartId: number, chunkEndId: number): Promise<void> {
+	async requestFileChunk(socket: Socket, txid: number, chunkStartId: number, chunkEndId: number): Promise<void> {
 		// 0x7d5: seems to be the code to request chunk range
 		const ctx = this.getNewMessage(txid, 0x7d5)
 		ctx.writeUInt32(0x0);
@@ -438,34 +455,34 @@ export class FileTransfer extends Service<FileTransferData> {
 		ctx.writeUInt32(chunkStartId);
 		ctx.writeUInt32(0x0);
 		ctx.writeUInt32(chunkEndId);
-		await this.writeWithLength(ctx);
+		await this.writeWithLength(ctx, socket);
 	}
 
 	/**
 	 * Signal Transfer Completed
 	 */
-	async signalTransferComplete(txid: number): Promise<void> {
+	async signalTransferComplete(socket: Socket, txid: number): Promise<void> {
 		// 0x7d6: seems to be the code to signal transfer completed
 		const ctx = this.getNewMessage(txid, 0x7d6)
-		await this.writeWithLength(ctx);
+		await this.writeWithLength(ctx, socket);
 	}
 
-	async signalMessageComplete(txid: number): Promise<void> {
+	async signalMessageComplete(socket: Socket, txid: number): Promise<void> {
 		// 0x7d6: seems to be the code to signal transfer completed
 		const ctx = this.getNewMessage(txid, 0x7d3)
-		await this.writeWithLength(ctx);
+		await this.writeWithLength(ctx, socket);
 	}
 	/**
 	 * Reply to Devices requesting our sources
 	 * @param {FileTransferData} data
 	 */
-	private async sendNoSourcesReply(message: FileTransferData) {
-		const ctx = this.getNewMessage(message.txid, 0x3)
+	private async sendNoSourcesReply(message: ServiceMessage<FileTransferData>) {
+		const ctx = this.getNewMessage(message.message.txid, 0x3)
 		ctx.writeUInt32(0x0);
 		ctx.writeUInt8(0x1);
 		ctx.writeUInt8(0x1);
 		ctx.writeUInt8(0x1);
-		await this.writeWithLength(ctx);
+		await this.writeWithLength(ctx, message.socket);
 	}
 
 	getNewMessage(txid: number, command?: number): WriteContext {

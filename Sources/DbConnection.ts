@@ -58,10 +58,11 @@ export class DbConnection {
 		const trackPath = _trackPath.split('/').slice(5, _trackPath.length).join('/')
 		const result: TrackDBEntry[] = this.querySource('SELECT * FROM Track WHERE path = (?) LIMIT 1', trackPath);
 		if (!result) throw new Error(`Could not find track: ${trackPath} in database.`);
-
-		result[0].trackData = await this.zInflate(result[0].trackData);
-		result[0].overviewWaveFormData = await this.zInflate(result[0].overviewWaveFormData);
-		result[0].beatData = await this.zInflate(result[0].beatData);
+		if (result[0]?.trackData) {
+			result[0].trackData = await this.zInflate(result[0].trackData);
+			result[0].overviewWaveFormData = await this.zInflate(result[0].overviewWaveFormData);
+			result[0].beatData = await this.zInflate(result[0].beatData);
+		}
 
 		return result[0];
 	}
@@ -74,9 +75,12 @@ export class DbConnection {
 	async getTrackById(id: number): Promise<TrackDBEntry> {
 		const result: TrackDBEntry[] = this.querySource('SELECT * FROM Track WHERE id = (?) LIMIT 1', id);
 		if (!result) throw new Error(`Could not find track id: ${id} in database.`);
-		result[0].trackData = await this.zInflate(result[0].trackData);
-		result[0].overviewWaveFormData = await this.zInflate(result[0].overviewWaveFormData);
-		result[0].beatData = await this.zInflate(result[0].beatData);
+		if (result[0]?.trackData) {
+			result[0].trackData = await this.zInflate(result[0].trackData);
+			result[0].overviewWaveFormData = await this.zInflate(result[0].overviewWaveFormData);
+			result[0].beatData = await this.zInflate(result[0].beatData);
+		}
+
 		return result[0];
 	}
 

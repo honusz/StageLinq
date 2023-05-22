@@ -20,7 +20,7 @@ function portHasChanged(incoming: ConnectionInfo, current: ConnectionInfo): bool
 
 export declare interface Devices {
 	on(event: 'newDevice', listener: (device: Device) => void): this;
-	on(event: 'newService', listener: (device: Device, service: InstanceType<typeof Service>) => void): this;
+	//on(event: 'newService', listener: (device: Device, service: InstanceType<typeof Service>) => void): this;
 }
 
 export class Devices extends EventEmitter {
@@ -45,8 +45,10 @@ export class Devices extends EventEmitter {
 	}
 
 	private serviceListener(service: InstanceType<typeof Service>) {
-		this.addService(service.deviceId, service)
-		service.addListener('closingService', (service) => this.deleteService(service.deviceId, service.name))
+
+		Logger.log(`service Listener! ${service.name}`)
+		//this.addService(service.deviceId, service)
+		//service.addListener('closingService', (service) => this.deleteService(service.deviceId, service.name))
 	}
 
 	private deviceListener(info: ConnectionInfo) {
@@ -109,20 +111,20 @@ export class Devices extends EventEmitter {
 	 * @param {DeviceId} deviceId
 	 * @param {Service} service
 	 */
-	private addService(deviceId: DeviceId, service: InstanceType<typeof Service>) {
-		const device = this.device(deviceId)
-		device.addService(service)
-	}
+	// private addService(deviceId: DeviceId, service: InstanceType<typeof Service>) {
+	// 	const device = this.device(deviceId)
+	// 	device.addService(service)
+	// }
 
 	/**
 	 *
 	 * @param {DeviceId} deviceId
 	 * @param {string} serviceName
 	 */
-	private deleteService(deviceId: DeviceId, serviceName: string) {
-		const device = this.device(deviceId);
-		device.deleteService(serviceName)
-	}
+	// private deleteService(deviceId: DeviceId, serviceName: string) {
+	// 	const device = this.device(deviceId);
+	// 	device.deleteService(serviceName)
+	// }
 
 
 

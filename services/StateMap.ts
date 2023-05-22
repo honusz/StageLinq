@@ -63,7 +63,7 @@ export interface StateData {
 export class StateMap extends Service<StateData> {
 	public readonly name = "StateMap";
 	static readonly emitter: EventEmitter = new EventEmitter();
-	static #instances: Map<string, StateMap> = new Map()
+	//static #instances: Map<string, StateMap> = new Map()
 
 	/**
 	 * StateMap Service Class
@@ -74,11 +74,11 @@ export class StateMap extends Service<StateData> {
 	 */
 	constructor(deviceId: DeviceId) {
 		super(deviceId)
-		StateMap.#instances.set(this.deviceId.string, this)
-		this.addListener('newDevice', (service: StateMap) => this.instanceListener('newDevice', service))
-		this.addListener('newDevice', (service: StateMap) => StageLinq.status.addDecks(service))
+		//StateMap.#instances.set(this.deviceId.string, this)
+		this.addListener('newDevice', (deviceId: DeviceId, service: StateMap) => this.instanceListener('newDevice', deviceId, service))
+		this.addListener('newDevice', (deviceId: DeviceId, service: StateMap) => StageLinq.status.addDecks(deviceId, service))
 		this.addListener('stateMessage', (data: StateData) => this.instanceListener('stateMessage', data))
-		this.addListener(`data`, (ctx: ReadContext) => this.parseData(ctx));
+		this.addListener(`data`, (ctx: ReadContext, socket: Socket) => this.parseData(ctx, socket));
 		this.addListener(`message`, (message: ServiceMessage<StateData>) => this.messageHandler(message));
 	}
 
@@ -89,13 +89,13 @@ export class StateMap extends Service<StateData> {
 	/**
 	 * Subscribe to StateMap States
 	 */
-	public async subscribe() {
-		const socket = this.socket;
+	public async subscribe(deviceId: DeviceId) {
+		const socket = this.sockets.get(deviceId.string)
 
-		Logger.silly(`Sending Statemap subscriptions to ${socket.remoteAddress}:${socket.remotePort} ${this.deviceId.string}`);
+		Logger.silly(`Sending Statemap subscriptions to ${socket.remoteAddress}:${socket.remotePort} ${deviceId.string}`);
 
-
-		switch (this.device.info.unit?.type) {
+		const device = StageLinq.devices.device(deviceId)
+		switch (device.info.unit?.type) {
 			case "PLAYER": {
 				for (let state of playerStateValues) {
 					await this.subscribeState(state, 0, socket);
@@ -120,14 +120,16 @@ export class StateMap extends Service<StateData> {
 	}
 
 
-	protected parseData(ctx: ReadContext): ServiceMessage<StateData> {
-		assert(this.deviceId);
+	protected parseData(ctx: ReadContext, socket: Socket): ServiceMessage<StateData> {
+		//assert(this.deviceId);
 
 		const marker = ctx.getString(4);
 		if (marker !== MAGIC_MARKER) {
 			Logger.error(assert(marker !== MAGIC_MARKER));
 		}
 		assert(marker === MAGIC_MARKER);
+		const deviceId = this.getDeviceId(socket)
+		//if (this.deviceId.string !== deviceId.string) Logger.warn(`deviceId mismatch! ${this.deviceId.string} ${deviceId.string}`);
 
 		const type = ctx.readUInt32();
 		switch (type) {
@@ -140,7 +142,8 @@ export class StateMap extends Service<StateData> {
 					const message: ServiceMessage<StateData> = {
 						id: MAGIC_MARKER_JSON,
 						service: this,
-						deviceId: this.deviceId,
+						socket: socket,
+						deviceId: deviceId,
 						message: {
 							name: name,
 							json: json,
@@ -162,7 +165,8 @@ export class StateMap extends Service<StateData> {
 				const message: ServiceMessage<StateData> = {
 					id: MAGIC_MARKER_INTERVAL,
 					service: this,
-					deviceId: this.deviceId,
+					socket: socket,
+					deviceId: deviceId,
 					message: {
 						name: name,
 						interval: interval,
@@ -181,12 +185,12 @@ export class StateMap extends Service<StateData> {
 
 	protected messageHandler(data: ServiceMessage<StateData>): void {
 
-		if (this.listenerCount(data?.message?.name) && data?.message?.json) {
-			this.emit(data.message.name, data)
+		if (data?.message?.name && this.listenerCount(`${data.deviceId.string}${data.message.name}`) && data?.message?.json) {
+			this.emit(`${data.deviceId.string}${data.message.name}`, data)
 		}
 
 		if (data?.message?.interval) {
-			this.sendStateResponse(data.message.name, data.service.socket);
+			this.sendStateResponse(data.message.name, data.socket);
 		}
 		if (data?.message?.json) {
 			this.emit('stateMessage', data);

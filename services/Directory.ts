@@ -1,16 +1,16 @@
 import { strict as assert } from 'assert';
 import { Logger } from '../LogEmitter';
 import { ReadContext, WriteContext } from '../utils';
-import { ServiceMessage, Units, DeviceId } from '../types';
+import { ServiceMessage, DeviceId } from '../types';
 import { Socket } from 'net';
 import { StageLinq } from '../StageLinq';
 import {
 	Service,
-	StateMap,
-	FileTransfer,
-	BeatInfo,
-	TimeSynchronization,
-	Broadcast,
+	// StateMap,
+	// FileTransfer,
+	// BeatInfo,
+	// TimeSynchronization,
+	// Broadcast,
 } from '../services'
 
 
@@ -48,9 +48,12 @@ export class Directory extends Service<DirectoryData> {
 		if (!token) {
 			return
 		}
+		const deviceId = new DeviceId(token);
+		this.deviceIds.set(this.addressPort(socket), deviceId)
+		//this.deviceId = deviceId;
 
-		this.deviceId = new DeviceId(token);
-		const deviceInfo = StageLinq.devices.device(this.deviceId)?.info
+
+		const deviceInfo = StageLinq.devices.device(deviceId)?.info
 
 
 		try {
@@ -73,8 +76,8 @@ export class Directory extends Service<DirectoryData> {
 					Logger.silent(this.name, 'received ', service, port);
 					break;
 				case MessageId.ServicesRequest:
-					Logger.debug(`service request from ${this.deviceId.string}`)
-					this.sendServiceAnnouncement(this.deviceId, socket);
+					Logger.debug(`service request from ${deviceId.string}`)
+					this.sendServiceAnnouncement(deviceId, socket);
 					break;
 				default:
 					ctx.rewind()
@@ -89,7 +92,8 @@ export class Directory extends Service<DirectoryData> {
 		const directoryData = {
 			id: id,
 			service: this,
-			deviceId: this.deviceId,
+			socket: socket,
+			deviceId: deviceId,
 			message: {},
 		};
 		this.emit(`message`, directoryData);
@@ -104,14 +108,14 @@ export class Directory extends Service<DirectoryData> {
 
 	/////////// Private Methods
 
-	private async getNewService(serviceName: string, deviceId: DeviceId): Promise<InstanceType<typeof Service>> {
-		if (serviceName == "FileTransfer") return await StageLinq.startServiceListener(FileTransfer, deviceId)
-		if (serviceName == "StateMap") return await StageLinq.startServiceListener(StateMap, deviceId)
-		if (serviceName == "FileTransfer") return await StageLinq.startServiceListener(FileTransfer, deviceId)
-		if (serviceName == "BeatInfo") return await StageLinq.startServiceListener(BeatInfo, deviceId)
-		if (serviceName == "Broadcast") return await StageLinq.startServiceListener(Broadcast, deviceId)
-		if (serviceName == "TimeSynchronization") return await StageLinq.startServiceListener(TimeSynchronization, deviceId)
-	}
+	// private async getNewService(serviceName: string, deviceId: DeviceId): Promise<InstanceType<typeof Service>> {
+	// 	if (serviceName == "FileTransfer") return await StageLinq.startServiceListener(FileTransfer, deviceId)
+	// 	if (serviceName == "StateMap") return await StageLinq.startServiceListener(StateMap, deviceId)
+	// 	if (serviceName == "FileTransfer") return await StageLinq.startServiceListener(FileTransfer, deviceId)
+	// 	if (serviceName == "BeatInfo") return await StageLinq.startServiceListener(BeatInfo, deviceId)
+	// 	if (serviceName == "Broadcast") return await StageLinq.startServiceListener(Broadcast, deviceId)
+	// 	if (serviceName == "TimeSynchronization") return await StageLinq.startServiceListener(TimeSynchronization, deviceId)
+	// }
 
 	/**
 	 * Send Service announcement with list of Service:Port
@@ -123,23 +127,35 @@ export class Directory extends Service<DirectoryData> {
 		const ctx = new WriteContext();
 		ctx.writeUInt32(MessageId.ServicesRequest);
 		ctx.write(StageLinq.options.actingAs.deviceId.array);
-		let services: InstanceType<typeof Service>[] = []
-		const device = await StageLinq.devices.getDevice(deviceId);
-		for (const serviceName of StageLinq.options.services) {
-			if (device && !!Units[device.info?.software?.name]) {
-				const service = await this.getNewService(serviceName, deviceId);
-				this.emit('newService', service);
-				services.push(service)
-			}
-		}
+		//let services: InstanceType<typeof Service>[] = []
+		//const device = await StageLinq.devices.getDevice(deviceId);
 
-		for (const service of services) {
+		Logger.silent(deviceId)
+
+		const servicePorts = StageLinq.servicePorts
+		for (const [serviceName, servicePort] of servicePorts) {
 			ctx.writeUInt32(MessageId.ServicesAnnouncement);
 			ctx.write(StageLinq.options.actingAs.deviceId.array);
-			ctx.writeNetworkStringUTF16(service.name);
-			ctx.writeUInt16(service.serverInfo.port);
-			Logger.debug(`${deviceId.string} Created new ${service.name} on port ${service.serverInfo.port}`);
+			ctx.writeNetworkStringUTF16(serviceName);
+			ctx.writeUInt16(servicePort);
+
 		}
+
+		// for (const serviceName of StageLinq.options.services) {
+		// 	if (device && !!Units[device.info?.software?.name]) {
+		// 		const service = await this.getNewService(serviceName, deviceId);
+		// 		this.emit('newService', service);
+		// 		services.push(service)
+		// 	}
+		// }
+
+		// for (const service of services) {
+		// 	ctx.writeUInt32(MessageId.ServicesAnnouncement);
+		// 	ctx.write(StageLinq.options.actingAs.deviceId.array);
+		// 	ctx.writeNetworkStringUTF16(service.name);
+		// 	ctx.writeUInt16(service.serverInfo.port);
+		// 	Logger.debug(`${deviceId.string} Created new ${service.name} on port ${service.serverInfo.port}`);
+		// }
 
 		const msg = ctx.getBuffer();
 		await socket.write(msg);

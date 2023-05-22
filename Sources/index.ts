@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { DeviceId } from '../types';
+import { DeviceId, TrackDBEntry } from '../types';
 import { Logger } from '../LogEmitter';
 //import * as fs from 'fs';
 import { DbConnection } from './DbConnection';
@@ -7,6 +7,7 @@ import { sleep } from '../utils';
 //import { StageLinq } from '../StageLinq';
 //import { Broadcast, BroadcastMessage, FileTransfer } from '../services';
 import { File, Dir } from './transfers'
+import { StageLinq } from '../StageLinq';
 
 
 export declare interface Sources {
@@ -21,6 +22,7 @@ export declare interface Sources {
 
 export class Sources extends EventEmitter {
 	#sources: Map<string, Source> = new Map();
+	#dbUuid: Map<string, Database> = new Map();
 	//#rootUpdateChannel: Dir = null;
 
 
@@ -83,6 +85,10 @@ export class Sources extends EventEmitter {
 		this.emit('newSource', source);
 	}
 
+	addDatabase(db: Database) {
+		this.#dbUuid.set(db.uuid, db)
+	}
+
 	/**
 	 * Delete Source
 	 * @param {string} sourceName name of the source
@@ -98,9 +104,9 @@ export class Sources extends EventEmitter {
 	 * @param {string} uuid
 	 * @returns {Database[]}
 	 */
-	getDBByUuid(uuid: string): Database[] {
+	getDBByUuid(uuid: string): Database {
 		const dbs = [...this.#sources.values()].map(src => src.getDatabases()).flat(1)
-		return dbs.filter(db => db.uuid == uuid)
+		return dbs.filter(db => db.uuid == uuid).shift()
 	}
 
 	// /**
@@ -137,11 +143,11 @@ export class Sources extends EventEmitter {
 		Logger.debug(`Downloaded ${source.deviceId.string}/${source.name}`);
 	}
 
-	async downloadFile(sourceName: string, remotePath: string, localPath: string): Promise<File> {
-		const source = this.#sources.get(sourceName);
-		const file = await source.downloadFile(remotePath, localPath);
-		return file
-	}
+	// async downloadFile(sourceName: string, remotePath: string, localPath: string): Promise<File> {
+	// 	const source = this.#sources.get(sourceName);
+	// 	const file = await source.downloadFile(remotePath, localPath);
+	// 	return file
+	// }
 }
 
 type DBInfo = {
@@ -204,49 +210,63 @@ export class Source {
 		return db
 	}
 
-	async downloadFile(remotePath: string, localPath: string): Promise<File> {
-		const fileName = remotePath.split('/').pop();
-		const service = this.sourceDirectory.service
-		const file = await service.getFile(remotePath, true)
-		return file
-	}
+	// async downloadFile(remotePath: string, localPath: string): Promise<File> {
+	// 	const fileName = remotePath.split('/').pop();
+	// 	const service = this.sourceDirectory.service
+	// 	const file = await service.getFile(remotePath, true)
+	// 	return file
+	// }
 }
 
 class Database {
 	file: File = null;
 	uuid: string = null;
+	private dbConnection: DbConnection = null;
 
 	constructor(dbFile: File) {
 		this.file = dbFile;
 		this.processDB();
 	}
 
-	async open(): Promise<DbConnection> {
-		await this.file.onFileClosed();
-		this.file.isOpen = true;
-		return new DbConnection(this.file.localPath)
+	async open(): Promise<void> {
+		const filepath = await this.file.open();
+		//this.file.isOpen = true;
+		this.dbConnection = new DbConnection(filepath)
+		return
 	}
 
 	async close() {
-		this.file.isOpen = false;
+		this.dbConnection = null;
+		this.file.close();
 	}
 
 	private async processDB() {
 		while (!this.file.isDownloaded) {
 			await sleep(500)
 		}
-		await this.file.onFileClosed();
+		const filepath = await this.file.open();
 		this.file.isOpen = true;
-		const db = new DbConnection(this.file.localPath)
+		const db = new DbConnection(filepath)
 		const result: DBInfo[] = await db.querySource('SELECT * FROM Information LIMIT 1')
 		this.uuid = result[0].uuid
+		StageLinq.sources.addDatabase(this);
+		console.log(this.uuid, this.file.deviceId.string, this.file.size)
+
 		db.close();
-		this.file.isOpen = false;
+		this.file.close();
 
 		// if (StageLinq.options.services.includes(Services.Broadcast)) {
 		// 	Broadcast.emitter.addListener(this.uuid, (key, value) => this.broadcastListener(key, value))
 		// 	Logger.debug(`Sources added broadcast listener for ${this.uuid}`);
 		// }
+	}
+
+	async getTrackById(id: number): Promise<TrackDBEntry> {
+		if (!this.file.isDownloaded) await this.file.downloadFile()
+		await this.open();
+		const track = await this.dbConnection.getTrackById(id)
+		this.close()
+		return track || null
 	}
 
 }

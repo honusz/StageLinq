@@ -6,6 +6,7 @@ import { ServiceMessage, DeviceId } from '../types';
 import { } from '../devices'
 import { Service } from './Service';
 import { StageLinq } from '../StageLinq';
+import { Socket } from 'net';
 
 
 export interface TimeSyncData {
@@ -28,17 +29,17 @@ export class TimeSynchronization extends Service<TimeSyncData> {
 	 */
 	constructor(deviceId: DeviceId) {
 		super(deviceId);
-		this.addListener(`data`, (ctx: ReadContext) => this.parseData(ctx));
+		this.addListener(`data`, (ctx: ReadContext, socket: Socket) => this.parseData(ctx, socket));
 		this.addListener(`message`, (message: ServiceMessage<TimeSyncData>) => this.messageHandler(message));
 	}
 
-	public async sendTimeSyncRequest() {
+	public async sendTimeSyncRequest(socket: Socket) {
 		const ctx = new WriteContext();
 		ctx.write(new Uint8Array([0x0, 0x0, 0x0, 0x0]));
 		ctx.write(StageLinq.options.actingAs.deviceId.array);
 		ctx.write(new Uint8Array([0x0]));
 		ctx.writeFixedSizedString('TimeSynchronization');
-		await this.write(ctx);
+		await this.write(ctx, socket);
 	}
 
 	private timeSyncMsgHelper(msgId: number, msgs: bigint[]): Buffer {
@@ -63,13 +64,13 @@ export class TimeSynchronization extends Service<TimeSyncData> {
 	}
 
 
-	private sendTimeSyncQuery(localTime: bigint, remoteTime: bigint) {
+	private sendTimeSyncQuery(localTime: bigint, remoteTime: bigint, socket: Socket) {
 		this.localTime = localTime;
 		const buffMsg = this.timeSyncMsgHelper(1, [this.localTime]);
 		const ctx = new WriteContext()
 		ctx.write(buffMsg)
 		this.remoteTime = remoteTime;
-		this.write(ctx);
+		this.write(ctx, socket);
 	};
 
 	// private async sendTimeSyncReply(interval: bigint, timeReceived: bigint): Promise<void> {
@@ -79,25 +80,28 @@ export class TimeSynchronization extends Service<TimeSyncData> {
 	//     await this.write(ctx, this.socket);
 	// };
 
-	protected parseData(ctx: ReadContext): ServiceMessage<TimeSyncData> {
+	protected parseData(ctx: ReadContext, socket: Socket): ServiceMessage<TimeSyncData> {
 		const timestamp = this.getTimeStamp();
 		const size = ctx.readUInt32();
 
 		if (size === 0) {
 			const deviceId = new DeviceId(ctx.read(16))
+			this.sockets.set(deviceId.string, socket)
 			const svcName = ctx.readNetworkStringUTF16();
 			const svcPort = ctx.readUInt16();
 			console.log(deviceId.string, svcName, svcPort)
 		} else {
 			const id = ctx.readUInt32();
+			const deviceId = this.getDeviceId(socket)
 			const msgs: bigint[] = []
 			while (ctx.sizeLeft()) {
 				msgs.push(ctx.readUInt64())
 			};
 			const message = {
 				id: id,
-				deviceId: this.deviceId,
+				deviceId: deviceId,
 				service: this,
+				socket: socket,
 				message: {
 					msgs: msgs,
 					timestamp: timestamp,
@@ -112,9 +116,9 @@ export class TimeSynchronization extends Service<TimeSyncData> {
 		if (this.avgTimeArray.length > 100) {
 			this.avgTimeArray.shift();
 			this.avgTimeArray.push(time);
-			const sum = this.avgTimeArray.reduce((a, b) => a + b, 0n);
-			const avg = (sum / BigInt(this.avgTimeArray.length)) || 0n;
-			Logger.silly(`${this.deviceId.string} Average time ${avg}`)
+			// const sum = this.avgTimeArray.reduce((a, b) => a + b, 0n);
+			// const avg = (sum / BigInt(this.avgTimeArray.length)) || 0n;
+			//Logger.silly(`${this.deviceId.string} Average time ${avg}`)
 		} else {
 			this.avgTimeArray.push(time);
 		}
@@ -126,7 +130,7 @@ export class TimeSynchronization extends Service<TimeSyncData> {
 		}
 		switch (msg.id) {
 			case 1:
-				this.sendTimeSyncQuery(msg.message.timestamp, msg.message.msgs.shift());
+				this.sendTimeSyncQuery(msg.message.timestamp, msg.message.msgs.shift(), msg.socket);
 				break;
 			case 2:
 				Logger.silly(msg.message)

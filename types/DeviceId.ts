@@ -8,7 +8,6 @@ class InvalidDeviceIdError extends Error {
 	}
 }
 
-
 export class DeviceId {
 	protected m_str: string;
 	protected m_array: Uint8Array;
@@ -44,8 +43,8 @@ export class DeviceId {
 	/**
 	 * Return DeviceId as string
 	 */
-	get string() {
-		return this.m_str
+	get string(): DeviceIdString {
+		return this.m_str as DeviceIdString
 	}
 
 	/**
@@ -56,3 +55,5 @@ export class DeviceId {
 	}
 
 }
+
+export type DeviceIdString = `${string}-${string}-${string}-${string}-${string}`

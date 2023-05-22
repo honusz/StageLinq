@@ -43,6 +43,12 @@ export class ReadContext extends Context {
 		return Buffer.from(view)
 	}
 
+	copy() {
+		const newBuf = new ArrayBuffer(this.buffer.byteLength);
+		new Uint8Array(newBuf).set(new Uint8Array(this.buffer));
+		return new ReadContext(newBuf);
+	}
+
 	readRemaining(): Uint8Array {
 		return this.read(this.sizeLeft());
 	}
