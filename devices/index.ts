@@ -111,7 +111,7 @@ export class Devices extends EventEmitter {
 	 * @param {DeviceId} deviceId
 	 * @param {Service} service
 	 */
-	// private addService(deviceId: DeviceId, service: InstanceType<typeof Service>) {
+	// addService(deviceId: DeviceId, service: InstanceType<typeof Service>) {
 	// 	const device = this.device(deviceId)
 	// 	device.addService(service)
 	// }

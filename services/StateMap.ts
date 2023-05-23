@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { Logger } from '../LogEmitter';
 import { strict as assert } from 'assert';
 import { ReadContext, WriteContext } from '../utils';
-import { ServiceMessage, StateNames, DeviceId } from '../types';
+import { ServiceMessage, StateNames, DeviceId, StateValue } from '../types';
 import { Socket } from 'net';
 import { Service } from '../services';
 import { StageLinq } from '../StageLinq';
@@ -48,12 +48,7 @@ const controllerStateValues = [...playerStateValues, ...mixerStateValues];
 
 export interface StateData {
 	name?: string;
-	json?: {
-		type: number;
-		string?: string;
-		value?: number;
-		state?: boolean;
-	};
+	json?: StateValue;
 	interval?: number;
 }
 
@@ -73,16 +68,12 @@ export class StateMap extends Service<StateData> {
 	 */
 	constructor(deviceId: DeviceId) {
 		super(deviceId);
-		this.addListener('newDevice', (deviceId: DeviceId, service: StateMap) => this.instanceListener('newDevice', deviceId, service))
 		this.addListener('newDevice', (deviceId: DeviceId, service: StateMap) => StageLinq.status.addDecks(deviceId, service))
-		this.addListener('stateMessage', (data: StateData) => this.instanceListener('stateMessage', data))
 		this.addListener(`data`, (ctx: ReadContext, socket: Socket) => this.parseData(ctx, socket));
 		this.addListener(`message`, (message: ServiceMessage<StateData>) => this.messageHandler(message));
+		this.addListener('stateMessage', (message: ServiceMessage<StateData>) => StageLinq.status.stateListener(message))
 	}
 
-	protected instanceListener(eventName: string, ...args: any) {
-		StateMap.emitter.emit(eventName, ...args)
-	}
 
 	/**
 	 * Subscribe to StateMap States
@@ -183,6 +174,10 @@ export class StateMap extends Service<StateData> {
 
 		if (data?.message?.name && this.listenerCount(`${data.deviceId.string}${data.message.name}`) && data?.message?.json) {
 			this.emit(`${data.deviceId.string}${data.message.name}`, data)
+		}
+
+		if (data?.message?.name && this.listenerCount(`${data.message.name}`) && data?.message?.json) {
+			this.emit(`${data.message.name}`, data)
 		}
 
 		if (data?.message?.interval) {

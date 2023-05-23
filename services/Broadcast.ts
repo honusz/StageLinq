@@ -3,7 +3,6 @@ import { ReadContext } from '../utils';
 import { ServiceMessage, DeviceId } from '../types';
 import { Service } from './Service';
 import { Logger } from '../LogEmitter';
-import { StageLinq } from '../StageLinq';
 import { Socket } from 'net';
 
 export type BroadcastMessage = {
@@ -74,16 +73,16 @@ export class Broadcast extends Service<BroadcastData> {
 			Logger.info(`Broadcast Connection`, data.message)
 			this.sockets.set(data.deviceId.string, data.socket)
 			this.deviceIds.set(this.addressPort(data.socket), data.deviceId)
-			StageLinq.devices.emit('newService', this.device, this);
+			this.emit('connection', this.device, this);
 		}
 
 		if (data?.message?.json) {
 			const msg = JSON.parse(data.message.json.replace(/\./g, ''));
 			const key = Object.keys(msg).shift();
 			const value = Object.values(msg).shift() as BroadcastMessage;
-			Broadcast.emitter.emit('message', data.deviceId, key, value);
-			if (Broadcast.emitter.listenerCount(value.databaseUuid)) {
-				Broadcast.emitter.emit(value.databaseUuid, key, value);
+			this.emit('broadcast', data.deviceId, key, value);
+			if (this.listenerCount(value.databaseUuid)) {
+				this.emit(value.databaseUuid, key, value);
 			}
 		}
 	}

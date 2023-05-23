@@ -13,7 +13,9 @@ export interface DiscoveryMessageOptions {
 export interface StageLinqOptions {
 	maxRetries?: number;
 	actingAs?: DiscoveryMessageOptions;
-	downloadDbSources?: boolean;
+	//downloadDbSources?: boolean;
+	downloadDatabase?: boolean;
+	downloadNowPlayingTrack?: boolean;
 	services?: Services[];
 	connectToMixer?: boolean
 }

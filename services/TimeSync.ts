@@ -144,5 +144,4 @@ export class TimeSynchronization extends Service<TimeSyncData> {
 		}
 	}
 
-	protected instanceListener() { }
 }

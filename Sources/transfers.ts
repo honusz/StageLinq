@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { WriteContext, sleep, getTempFilePath } from '../utils';
 import * as fs from 'fs';
 import { FileTransfer, FileTransferData } from '../services';
-import { ServiceMessage, DeviceId } from '../types';
+import { ServiceMessage, DeviceId, SourceName } from '../types';
 import { Logger } from '../LogEmitter';
 import { performance } from 'perf_hooks';
 import { Socket } from 'net';
@@ -81,13 +81,11 @@ export abstract class Transfer extends EventEmitter {
     }
 
     listener(data: ServiceMessage<FileTransferData>): void {
-
         const id = Request[data.id] || Response[data.id]
         const { ...message } = data.message;
         if (id !== "FileChunk") Logger.debug(`TXID:${message.txid} ${data.deviceId.string} ${this.remotePath} ${id}`, message);
         this.emit(id, data)
         this.handler(data)
-
     }
 
     protected abstract handler(message: ServiceMessage<FileTransferData>): void
@@ -99,7 +97,6 @@ export class Dir extends Transfer {
     private subDirNames: string[] = [];
     files: Set<string> = new Set();
     directories: Set<string> = new Set();
-
 
     constructor(socket: Socket, path: string) {
         super(socket, path);
@@ -125,20 +122,51 @@ export class Dir extends Transfer {
         subDirNames.forEach(dir => this.directories.add(dir))
         this.subDirNames = [...this.subDirNames, ...subDirNames]
     }
-
 }
+// enum Status {
+
+//     isDownloaded = 0x0001,
+
+// }
+const isBusy = 0x0001;
+const isDownloadable = 0x0010;
+const isDownloaded = 0x0100;
+const isPendingUpdate = 0x1000;
+const isUpdated = 0x10000;
+const isOpen = 0x100000;
+const isUpdating = 0x1000000;
+
+interface IStatus {
+    isBusy: boolean;
+    isDownloadable: boolean;
+    isDownloaded: boolean;
+    isPendingUpdate: boolean;
+    isUpdated: boolean;
+    isOpen: boolean;
+    isUpdating: boolean;
+}
+// function fn(options) {
+//   if (options & isBusy) { console.log("1"); }
+//   if (options & OPTION_2) { console.log("2"); }
+//   if (options & OPTION_3) { console.log("3"); }
+//   if (options & OPTION_4) { console.log("4"); }
+// }
+
 
 export class File extends Transfer {
+    //private isBusy: boolean = false
+    //status: 'DOWNLOADED' | 'READY' | 'PENDINGUPDATE' | 'UPDATED' | 'BUSY' = null
+    private _status: number = 0;
     size: number = null;
     localPath: string = null;
-    isDownloaded: boolean = false;
-    isOpen: boolean = false;
-    hasPendingUpdate: boolean = false;
+    //private _isDownloaded: boolean = false;
+    //isOpen: boolean = false;
+    //hasPendingUpdate: boolean = false;
     private fileStream: fs.WriteStream = null;
     private chunks: number = null;
     private chunksReceived: number = 0;
     private chunkUpdates: ByteRange[][] = [];
-    private chunkUpdateBusy: boolean = false;
+    // private chunkUpdateBusy: boolean = false;
     private chunkSessionNumber = 0;
     private chunksToUpdate = 0
     private chunksUpdated = 0
@@ -146,7 +174,6 @@ export class File extends Transfer {
     private chunkBuffer: Buffer[] = [];
     private chunkCheck: boolean[] = [];
     private downloadStartTime: number = 0.0;
-
 
     constructor(socket: Socket, path: string, localPath?: string) {
         super(socket, path);
@@ -162,22 +189,62 @@ export class File extends Transfer {
         return this.remotePath.split('/').pop()
     }
 
+    get isDownloaded() {
+        return this.status.isDownloaded
+        //return (this._isDownloaded && (this.status === 'DOWNLOADED' || this.status === 'UPDATED'))
+    }
+
+    // set isDownloaded(bool: boolean) {
+    //     this._isDownloaded = bool
+    //     if (bool) this.status = 'DOWNLOADED'
+    // }
+
+
+    get status(): IStatus {
+        return {
+            isBusy: !!(this._status & isBusy),
+            isDownloadable: !!(this._status & isDownloadable),
+            isDownloaded: !!(this._status & isDownloaded),
+            isPendingUpdate: !!(this._status & isPendingUpdate),
+            isUpdated: !!(this._status & isUpdated),
+            isOpen: !!(this._status & isOpen),
+            isUpdating: !!(this._status & isUpdating),
+        }
+    }
+
+    private setStatus(flags: number) {
+        this._status |= flags
+    }
+
+    private clearStatus(flags: number) {
+        this._status ^= flags
+    }
+
+    private checkStatus(flags: number): boolean {
+        return !!(this._status & flags)
+    }
     async open(): Promise<string> {
 
-        while (this.hasPendingUpdate) {
+        //this.setStatus(isBusy)
+        console.warn('check status', this.checkStatus(isBusy | isOpen), this.status);
+
+        while (this.checkStatus(isBusy | isOpen)) {
             await sleep(250)
         }
-        while (this.isOpen) {
-            await sleep(250)
-        }
+
+
         Logger.debug(`${this.fileName} open!`)
-        this.isOpen = true;
+        //this.isOpen = true;
+        this.setStatus(isOpen)
+        console.warn('open', this.status)
         return this.localPath
     }
 
     close() {
         Logger.debug(`${this.fileName} closed!`)
-        this.isOpen = false;
+        //this.isOpen = false;
+        this.clearStatus(isOpen);
+        console.warn('closed', this.status)
     }
 
     protected handler(data: ServiceMessage<FileTransferData>): void {
@@ -195,13 +262,16 @@ export class File extends Transfer {
         if (data.id === Response.FileChunk) {
             const chunk = (data.message.offset > 1) ? Math.ceil(data.message.offset / data.message.size) : data.message.offset
             this.chunksReceived += 1
-            this.chunkHandler(data.message.data);
+            if (this.fileStream) this.chunkHandler(data.message.data);
             this.chunkCheck[chunk] = true;
-            this.emit(`chunk:${chunk}`, data);
+            if (this.listenerCount(`chunk:${chunk}`)) this.emit(`chunk:${chunk}`, data);
+            if (this.listenerCount('chunk')) this.emit(`chunk`, data)
         }
         if (data.id === Response.DataUpdate) {
-            this.hasPendingUpdate = true;
-            this.chunksToUpdate += message.byteRange.length
+            //this.hasPendingUpdate = true;
+            //this.status = 'PENDINGUPDATE'
+            this.setStatus(isPendingUpdate)
+            this.setFileSize(data.message.size)
             this.chunkUpdates.push(message.byteRange);
             this.updateChunkRange();
         }
@@ -230,42 +300,53 @@ export class File extends Transfer {
         })
     }
 
+    private getChunkArrayFromRange(chunkRange: ByteRange): number[] {
+        const rangeArray = (start: number, stop: number) =>
+            Array.from({ length: (stop - start) / 1 + 1 }, (_, i) => start + i * 1);
+        return rangeArray(chunkRange[0], chunkRange[1])
+    }
+
     private async updateChunkRange() {
         this.chunkUpdatesPending++
         this.chunkSessionNumber++
-        Logger.info(`updateChunkRange called for ${this.chunkSessionNumber}`)
-        while (this.chunkUpdateBusy) {
+        //this.setStatus(isBusy)
+        Logger.debug(`updateChunkRange called for ${this.chunkSessionNumber} current ${this.chunksToUpdate}`, this.status)
+        while (this.checkStatus(isUpdating)) {
             await sleep(250);
         }
-        this.chunkUpdateBusy = true;
+        //this.chunkUpdateBusy = true;
+        this.setStatus(isUpdating)
+        this.setStatus(isBusy)
+
         const byteRange: ByteRange[] = this.chunkUpdates.shift()
-        const rangeArray = (start: number, stop: number) =>
-            Array.from({ length: (stop - start) / 1 + 1 }, (_, i) => start + i * 1);
 
         for (const range of byteRange) {
-            const chunks = rangeArray(range[0], range[1])
+            const chunks = this.getChunkArrayFromRange(range)
             this.chunksToUpdate += chunks.length
+            Logger.debug(`added ${chunks.length} total ${this.chunksToUpdate} range ${range[0]} - ${range[1]}`)
             for (const chunk of chunks) {
-                const data = await this.getFileChunk(chunk, this.service);
+                const data = await this.getFileChunk(chunk);
                 const offset = chunk * CHUNK_SIZE;
                 const written = await this.updateFileChunk(this.localPath, data.message.data, offset)
                 this.chunksUpdated++
-                Logger.debug(`Wrote ${written} bytes at offset ${offset}`);
+                Logger.debug(`Wrote chunk ${chunk} - ${written} bytes at offset ${offset}`);
             }
         }
-        Logger.log(`update progress ${this.chunksUpdated}/${this.chunksToUpdate}`)
+        Logger.debug(`update progress ${this.chunksUpdated}/${this.chunksToUpdate}`)
         this.chunkUpdatesPending--
-        this.chunkUpdateBusy = false;
+        //this.chunkUpdateBusy = false;
+        this.clearStatus(isUpdating)
         if (!this.chunkUpdatesPending) {
-            Logger.log(`${this.fileName} Updated! Chunks written ${this.chunksUpdated}`)
-            this.hasPendingUpdate = false;
+            Logger.debug(`${this.fileName} Updated! Chunks written ${this.chunksUpdated} of ${this.chunksToUpdate}`)
+            //this.hasPendingUpdate = false;
+            this.clearStatus(isPendingUpdate | isBusy)
+            //this.setStatus(is)
         }
-
     }
 
-    private async getFileChunk(chunk: number, service: FileTransfer): Promise<ServiceMessage<FileTransferData>> {
+    private async getFileChunk(chunk: number): Promise<ServiceMessage<FileTransferData>> {
         return await new Promise((resolve, reject) => {
-            service.requestFileChunk(this.socket, this.txid, chunk, chunk);
+            StageLinq.fileTransfer.requestFileChunk(this.socket, this.txid, chunk, chunk);
             this.on(`chunk:${chunk}`, (data: ServiceMessage<FileTransferData>) => {
                 resolve(data);
             });
@@ -290,31 +371,53 @@ export class File extends Transfer {
     }
 
     async downloadFile(_localPath?: string): Promise<number> {
+        Logger.debug('downloadFile called', this.status)
+        if (this.checkStatus(isBusy | isOpen)) return
+        //if (this.status.isOpen) return
 
-        const localPath = _localPath || this.localPath
-        this.fileStream = fs.createWriteStream(`${localPath}`);
-        this.downloadStartTime = performance.now();
-        const txProgress = setInterval(() => {
-            Logger.debug(this.progressUpdater(this))
-        }, 250)
-        this.service.requestFileChunk(this.socket, this.txid, 0, this.chunks - 1);
+        this.setStatus(isBusy)
+        try {
+            const localPath = _localPath || this.localPath
+            this.fileStream = fs.createWriteStream(`${localPath}`);
+            this.downloadStartTime = performance.now();
+            const txProgress = setInterval(() => {
+                Logger.debug(this.progressUpdater(this))
+            }, 250)
+            StageLinq.fileTransfer.requestFileChunk(this.socket, this.txid, 0, this.chunks - 1);
 
-        while (this.size > this.fileStream.bytesWritten) {
-            await sleep(250)
+            while (this.size > this.fileStream.bytesWritten) {
+                await sleep(10)
+            }
+            const endTime = performance.now();
+            clearInterval(txProgress);
+
+            Logger.debug(`TXID: ${this.txid} completed in ${((endTime - this.downloadStartTime) / 1000).toPrecision(3)} secs`, this.deviceId.string, this.fileName, this.fileStream.bytesWritten.toLocaleString('en-US'), this.size.toLocaleString('en-US'))
+            this.fileStream.end();
+            //await sleep(250)
+
+            const bytesWritten = parseInt(`${this.fileStream.bytesWritten}`)
+            this.fileStream = null;
+            //this.isDownloaded = true;
+            this.clearStatus(isBusy)
+            this.setStatus(isDownloaded)
+            //console.warn(this.status)
+            // console.warn(`bytes written returning ${bytesWritten}`)
+            return bytesWritten;
+        } catch (err) {
+            //this.isDownloaded = false
+            this.clearStatus(isBusy | isDownloaded)
+            Logger.error(err)
         }
-        const endTime = performance.now();
-        clearInterval(txProgress);
-
-        Logger.debug(`TXID: ${this.txid} completed in ${((endTime - this.downloadStartTime) / 1000).toPrecision(3)} secs`, this.deviceId.string, this.fileName, this.fileStream.bytesWritten.toLocaleString('en-US'), this.size.toLocaleString('en-US'))
-        this.fileStream.end();
-        this.isDownloaded = true;
-        return this.fileStream.bytesWritten;
     }
 
     private setFileSize(size: number) {
-        if (this.size && size !== this.size) throw new Error('Size Descrepancy');
         this.size = size;
         this.chunks = Math.ceil(this.size / CHUNK_SIZE);
         this.chunkCheck = new Array(this.chunks).fill(false)
+        this.setStatus(isDownloadable)
+    }
+
+    get asSourceName(): SourceName {
+        return `${this._deviceId.string}/${this.remotePath.substring(1).split('/').shift()}` as SourceName
     }
 }

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { DeviceId, TrackDBEntry } from '../types';
+import { DeviceId, DeviceIdString, TrackDBEntry, SourceName, StateValue } from '../types';
 import { Logger } from '../LogEmitter';
 import { DbConnection } from './DbConnection';
 import { sleep } from '../utils';
@@ -17,13 +17,37 @@ export declare interface Sources {
 	on(event: 'dbDownloaded', listener: (source: Source) => void): this;
 }
 
-export class Sources extends EventEmitter {
-	#sources: Map<string, Source> = new Map();
-	#dbUuid: Map<string, Database> = new Map();
+// type JsonEntry = {
+// 	string: string,
+// 	type: number
+// }
 
+export class Sources extends EventEmitter {
+	#sources: Map<SourceName, Source> = new Map();
+	#dbUuid: Map<string, Database> = new Map();
+	#connectedSources: Map<DeviceIdString, SourceName> = new Map();
+	#connectedSourcesSet: Set<SourceName> = new Set();
+
+
+	connectedSourceListener(sourceNetworkPath: StateValue, deviceId: DeviceId) {
+		//if (remotePath.substring(0, 6) === 'net://') remotePath = _remotePath.substring(6)
+		const sourceName = sourceNetworkPath.string.substring(6) as SourceName
+		this.#connectedSources.set(deviceId.string, sourceName)
+		this.#connectedSourcesSet.add(sourceName)
+		const source = this.#sources.get(sourceName)
+
+		if (!source) return
+		const databases = source.getDatabases()
+		if (databases[0] && !databases[0].file?.isDownloaded) databases[0].downloadDB();
+	}
+
+	getConnectedSources(): SourceName[] {
+		return [...this.#connectedSources.values()]
+	}
 	/**
 	 * Sources EndPoint Class
 	 */
+
 
 
 	/**
@@ -32,8 +56,8 @@ export class Sources extends EventEmitter {
 	 * @param {DeviceId} deviceId - DeviceID instance
 	 * @returns {boolean} true if has source
 	 */
-	hasSource(sourceName: string, deviceId: DeviceId): boolean {
-		return this.#sources.has(`${deviceId.string}${sourceName}`);
+	hasSource(sourceName: SourceName, deviceId: DeviceId): boolean {
+		return this.#sources.has(`${deviceId.string}/${sourceName}`);
 	}
 
 	/**
@@ -42,9 +66,9 @@ export class Sources extends EventEmitter {
 	 * @param {DeviceId} deviceId - DeviceID instance
 	 * @returns {boolean} true if has Source AND the source has downloaded DB
 	 */
-	hasSourceAndDB(sourceName: string, deviceId: DeviceId): boolean {
-		const source = this.#sources.get(`${deviceId.string}${sourceName}`);
-		const dbs = source.getDatabases().filter(db => db.file.isDownloaded)
+	hasSourceAndDB(sourceName: SourceName, deviceId: DeviceId): boolean {
+		const source = this.#sources.get(`${deviceId.string}/${sourceName}`);
+		const dbs = source.getDatabases().filter(db => db.file.status.isDownloaded)
 		return (source && dbs.length) ? true : false
 	}
 
@@ -54,8 +78,8 @@ export class Sources extends EventEmitter {
 	 * @param {DeviceId} deviceId DeviceID instance
 	 * @returns {Source}
 	 */
-	getSource(sourceName: string, deviceId: DeviceId): Source {
-		return this.#sources.get(`${deviceId.string}${sourceName}`);
+	getSource(sourceName: SourceName, deviceId: DeviceId): Source {
+		return this.#sources.get(`${deviceId.string}/${sourceName}`);
 	}
 
 	/**
@@ -76,7 +100,8 @@ export class Sources extends EventEmitter {
 	 * @param {Source} source
 	 */
 	setSource(source: Source) {
-		this.#sources.set(`${source.deviceId.string}${source.name}`, source);
+		const sourceName = `${source.deviceId.string}/${source.name}` as SourceName
+		this.#sources.set(sourceName, source);
 		this.emit('newSource', source);
 	}
 
@@ -89,9 +114,13 @@ export class Sources extends EventEmitter {
 	 * @param {string} sourceName name of the source
 	 * @param {DeviceId} deviceId
 	 */
-	deleteSource(sourceName: string, deviceId: DeviceId) {
-		this.#sources.delete(`${deviceId.string}${sourceName}`)
+	deleteSource(sourceName: SourceName, deviceId: DeviceId) {
+		this.#sources.delete(`${deviceId.string}/${sourceName}`)
 		this.emit('sourceRemoved', sourceName, deviceId);
+	}
+
+	getDatabases(): Database[] {
+		return [...this.#dbUuid.values()]
 	}
 
 	/**
@@ -100,8 +129,9 @@ export class Sources extends EventEmitter {
 	 * @returns {Database[]}
 	 */
 	getDBByUuid(uuid: string): Database {
-		const dbs = [...this.#sources.values()].map(src => src.getDatabases()).flat(1)
-		return dbs.filter(db => db.uuid == uuid).shift()
+		//const dbs = [...this.#sources.values()].map(src => src.getDatabases()).flat(1)
+		//return dbs.filter(db => db.uuid == uuid).shift()
+		return this.#dbUuid.get(uuid)
 	}
 
 	/**
@@ -172,6 +202,12 @@ export class Source {
 	newDatabase(file: File): Database {
 		const db = new Database(file)
 		this.#databases.set(file.fileName, db);
+		const connectedSources = StageLinq.sources.getConnectedSources()
+		console.warn(connectedSources, file.asSourceName)
+		if (connectedSources.includes(file.asSourceName) && !file.status.isDownloaded) {
+			console.warn('yes its there')
+			db.downloadDB();
+		}
 		return db
 	}
 }
@@ -183,10 +219,11 @@ class Database {
 
 	constructor(dbFile: File) {
 		this.file = dbFile;
-		this.processDB();
+		if (this.file.status.isDownloaded) this.processDB();
 	}
 
 	async open(): Promise<void> {
+		if (!this.file.status.isDownloaded) await this.downloadDB();
 		const filepath = await this.file.open();
 		this.dbConnection = new DbConnection(filepath)
 		return
@@ -197,20 +234,31 @@ class Database {
 		this.file.close();
 	}
 
-	private async processDB() {
-		while (!this.file.isDownloaded) {
+	async downloadDB() {
+		const bytes = await this.file.downloadFile();
+		console.warn('bytes', bytes)
+		const uuid = await this.processDB();
+		console.warn(uuid)
+	}
+
+	private async processDB(): Promise<string> {
+		console.warn('processDb')
+		while (!this.file.status.isDownloaded) {
 			await sleep(500)
 		}
-		const filepath = await this.file.open();
-		this.file.isOpen = true;
+		await this.open()
+		const filepath = this.file.localPath
+		//await this.file
 		const db = new DbConnection(filepath)
 		const result: DBInfo[] = await db.querySource('SELECT * FROM Information LIMIT 1')
 		this.uuid = result[0].uuid
 		StageLinq.sources.addDatabase(this);
+		//const sources = StageLinq.sources.getDatabases()
 
 		db.close();
+		//this.file.close()
 		this.file.close();
-
+		return this.uuid
 		// if (StageLinq.options.services.includes(Services.Broadcast)) {
 		// 	Broadcast.emitter.addListener(this.uuid, (key, value) => this.broadcastListener(key, value))
 		// 	Logger.debug(`Sources added broadcast listener for ${this.uuid}`);
@@ -218,7 +266,7 @@ class Database {
 	}
 
 	async getTrackById(id: number): Promise<TrackDBEntry> {
-		if (!this.file.isDownloaded) await this.file.downloadFile()
+		if (!this.file.status.isDownloaded) await this.downloadDB()
 		await this.open();
 		const track = await this.dbConnection.getTrackById(id)
 		this.close()

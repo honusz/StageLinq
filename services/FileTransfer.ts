@@ -72,9 +72,9 @@ export class FileTransfer extends Service<FileTransferData> {
 	 */
 	constructor(deviceId?: DeviceId) {
 		super(deviceId)
-		this.addListener('newDevice', (deviceId: DeviceId, service: FileTransfer) => this.instanceListener('newDevice', deviceId, service))
-		this.addListener('newSource', (source: Source) => this.instanceListener('newSource', source))
-		this.addListener('sourceRemoved', (name: string, deviceId: DeviceId) => this.instanceListener('newSource', name, deviceId))
+		//this.addListener('newDevice', (deviceId: DeviceId, service: FileTransfer) => this.instanceListener('newDevice', deviceId, service))
+		//this.addListener('newSource', (source: Source) => this.instanceListener('newSource', source))
+		//this.addListener('sourceRemoved', (name: string, deviceId: DeviceId) => this.instanceListener('newSource', name, deviceId))
 		//this.addListener('fileTransferProgress', (source: Source, fileName: string, txid: number, progress: FileTransferProgress) => this.instanceListener('fileTransferProgress', source, fileName, txid, progress))
 		//this.addListener('fileTransferComplete', (source: Source, fileName: string, txid: number) => this.instanceListener('fileTransferComplete', source, fileName, txid));
 		this.addListener(`data`, (ctx: ReadContext, socket: Socket) => this.parseData(ctx, socket));
@@ -94,10 +94,10 @@ export class FileTransfer extends Service<FileTransferData> {
 		return txid;
 	}
 
-	protected instanceListener(eventName: string, ...args: any) {
-		FileTransfer.emitter.emit(eventName, ...args)
+	// protected instanceListener(eventName: string, ...args: any) {
+	// 	FileTransfer.emitter.emit(eventName, ...args)
 
-	}
+	// }
 
 	private parseData(ctx: ReadContext, socket: Socket): ServiceMessage<FileTransferData> {
 
@@ -323,8 +323,9 @@ export class FileTransfer extends Service<FileTransferData> {
 					const fileStat = await this.fileRequest(message.socket, `/${source}/Engine Library/Database2/hm.db`) as File;
 
 					const thisSource = new Source(source, message.deviceId, newDir);
-					await fileStat.downloadFile();
-					thisSource.newDatabase(fileStat);
+					//await fileStat.downloadFile();
+					const db = thisSource.newDatabase(fileStat);
+					StageLinq.sources.addDatabase(db);
 					StageLinq.sources.setSource(thisSource);
 					resolve(fileStat)
 

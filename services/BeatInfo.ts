@@ -48,19 +48,19 @@ export class BeatInfo extends Service<BeatData> {
 
 	constructor(deviceId?: DeviceId) {
 		super(deviceId)
-		this.addListener('connection', () => this.instanceListener('newDevice', this));
-		this.addListener('beatMessage', (data: BeatData) => this.instanceListener('beatMessage', data));
+		//this.addListener('connection', () => this.instanceListener('newDevice', this));
+		//this.addListener('beatMessage', (data: BeatData) => this.instanceListener('beatMessage', data));
 		this.addListener(`data`, (ctx: ReadContext, socket: Socket) => this.parseData(ctx, socket));
 		this.addListener(`message`, (message: ServiceMessage<BeatData>) => this.messageHandler(message));
 	}
 
-	protected instanceListener(eventName: string, ...args: any) {
-		BeatInfo.emitter.emit(eventName, ...args)
-	}
+	// protected instanceListener(eventName: string, ...args: any) {
+	// 	BeatInfo.emitter.emit(eventName, ...args)
+	// }
 
-	static getInstances(): string[] {
-		return [...BeatInfo.#instances.keys()]
-	}
+	// static getInstances(): string[] {
+	// 	return [...BeatInfo.#instances.keys()]
+	// }
 
 	deleteDevice(deviceId: DeviceId) {
 		BeatInfo.#instances.delete(deviceId.string)

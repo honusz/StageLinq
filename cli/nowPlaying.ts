@@ -8,8 +8,8 @@ import { StageLinq } from '../StageLinq';
 async function main() {
 
     const stageLinqOptions: StageLinqOptions = {
-        downloadDbSources: true,
         actingAs: ActingAsDevice.NowPlaying,
+        downloadNowPlayingTrack: true,
         services: [
             Services.StateMap,
             Services.FileTransfer,
@@ -18,13 +18,15 @@ async function main() {
 
     const stageLinq = new StageLinq(stageLinqOptions);
 
-    while (stageLinqOptions.services.includes(Services.StateMap) && !stageLinq.stateMap) {
-        await sleep(250)
-    }
+    await stageLinq.ready();
 
-    while (stageLinqOptions.services.includes(Services.FileTransfer) && !stageLinq.fileTransfer) {
-        await sleep(250)
-    }
+    // while (stageLinqOptions.services.includes(Services.StateMap) && !stageLinq.stateMap) {
+    //     await sleep(250)
+    // }
+
+    // while (stageLinqOptions.services.includes(Services.FileTransfer) && !stageLinq.fileTransfer) {
+    //     await sleep(250)
+    // }
 
     async function deckIsMaster(data: ServiceMessage<StateData>) {
         const { ...message } = data.message
@@ -33,7 +35,7 @@ async function main() {
             await sleep(250);
             const track = StageLinq.status.getTrack(data.deviceId, deck);
             console.log(`Now Playing: `, track);
-            if (stageLinqOptions.services.includes(Services.FileTransfer) && StageLinq.options.downloadDbSources) {
+            if (stageLinqOptions.services.includes(Services.FileTransfer) && StageLinq.options.downloadNowPlayingTrack) {
                 const file = await stageLinq.fileTransfer.getFileInfo(track.TrackNetworkPath);
                 const txProgress = setInterval(() => {
                     console.log(file.progressUpdater(file))

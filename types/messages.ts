@@ -38,3 +38,12 @@ export interface ServiceMessage<T> {
 // TODO: Maybe some kind of validation?
 export type IpAddress = `${string}.${string}.${string}.${string}`;
 export type IpAddressPort = `${string}.${string}.${string}.${string}:${string}`
+export type SourceName = `${string}/${string} ${string}`
+export type color = `#${string}`
+export type StateValue = {
+	type: number;
+	string?: string;
+	value?: number;
+	state?: boolean;
+	color?: color;
+}

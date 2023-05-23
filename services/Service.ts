@@ -151,7 +151,7 @@ export abstract class Service<T> extends EventEmitter {
 
 				const serviceName = ctx.readNetworkStringUTF16();
 				const port = ctx.readUInt16();
-				Logger.silent(deviceId.string, serviceName, this.name, port, socket.remotePort)
+				Logger.debug(deviceId.string, serviceName, this.name, port, socket.remotePort)
 				this.sockets.set(deviceId.string, socket)
 				this.emit('newDevice', deviceId, this);
 				if (ctx.sizeLeft()) this.socketBuffers.set(this.addressPort(socket), ctx.readRemainingAsNewBuffer());
@@ -231,5 +231,5 @@ export abstract class Service<T> extends EventEmitter {
 	}
 
 
-	protected abstract instanceListener(eventName: string, ...args: any): void
+	//protected abstract instanceListener(eventName: string, ...args: any): void
 }

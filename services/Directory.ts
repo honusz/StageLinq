@@ -137,7 +137,4 @@ export class Directory extends Service<DirectoryData> {
 		await socket.write(message);
 		Logger.silly(`sent TimeStamp to ${socket.remoteAddress}:${socket.remotePort}`);
 	}
-
-	protected instanceListener() {
-	}
 }

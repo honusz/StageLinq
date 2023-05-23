@@ -7,7 +7,7 @@ import { StageLinq } from '../StageLinq';
 async function main() {
 
     const stageLinqOptions: StageLinqOptions = {
-        downloadDbSources: true,
+        //downloadDbSources: true,
         actingAs: ActingAsDevice.NowPlaying,
         services: [
             Services.FileTransfer,

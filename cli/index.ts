@@ -1,5 +1,5 @@
 import { ActingAsDevice, StageLinqOptions, Services, DeviceId, ServiceMessage } from '../types';
-import { StateData, StateMap, BeatData, BeatInfo, Broadcast } from '../services';
+import { StateData, BeatData, BeatInfo } from '../services';
 import { Source } from '../Sources'
 import { sleep } from '../utils/sleep';
 import { StageLinq } from '../StageLinq';
@@ -24,11 +24,38 @@ function progressBar(size: number, bytes: number, total: number): string {
 
 async function main() {
 
+	const one = 0x1
+	const two = 0x10
+	const three = 0x100
+
+	function fn(options: number) {
+		console.warn(options)
+		if (options & one) console.warn("one");
+		if (options & two) console.warn("two");
+		if (options & three) console.warn("three");
+		if (options & (1 | 2)) console.warn("one or two");
+		//if (options & (1 | 2)) console.warn("one and two");
+
+		//if (options & OPTION_4) { console.log("4"); }
+	}
+	let flags = 0
+	flags |= one //| two
+	fn(flags)
+	flags |= two
+	//flags ^= two | three
+	fn(flags)
+	//flags ^= one
+	//fn(flags)
+	//fn(one & two)
+	//fn(one | two)
+	//await sleep(60000)
+
 	console.log('Starting CLI');
 
 	const stageLinqOptions: StageLinqOptions = {
-		downloadDbSources: true,
 		actingAs: ActingAsDevice.StageLinqJS,
+		downloadDatabase: true,
+		downloadNowPlayingTrack: true,
 		services: [
 			Services.StateMap,
 			Services.FileTransfer,
@@ -39,6 +66,7 @@ async function main() {
 
 	const stageLinq = new StageLinq(stageLinqOptions);
 
+	await stageLinq.ready();
 
 	stageLinq.logger.on('error', (...args: any) => {
 		console.error(...args);
@@ -64,19 +92,6 @@ async function main() {
 	//   console.debug(...args);
 	// });
 
-
-	while (stageLinqOptions.services.includes(Services.StateMap) && !stageLinq.stateMap) {
-		await sleep(250)
-	}
-	while (stageLinqOptions.services.includes(Services.BeatInfo) && !stageLinq.beatInfo) {
-		await sleep(250)
-	}
-	while (stageLinqOptions.services.includes(Services.FileTransfer) && !stageLinq.fileTransfer) {
-		await sleep(250)
-	}
-	while (stageLinqOptions.services.includes(Services.Broadcast) && !stageLinq.broadcast) {
-		await sleep(250)
-	}
 
 	StageLinq.discovery.on('listening', () => {
 		console.log(`[DISCOVERY] Listening`)
@@ -106,14 +121,26 @@ async function main() {
 
 	if (stageLinqOptions.services.includes(Services.Broadcast)) {
 
-		Broadcast.emitter.on('message', async (deviceId: DeviceId, name: string, value) => {
-			console.log(`[BROADCAST] ${deviceId.string} ${name}`, value);
-			const db = StageLinq.sources.getDBByUuid(value.databaseUuid);
-			if (db) {
+		stageLinq.broadcast.on('broadcast', async (deviceId: DeviceId, name: string, value) => {
+			console.info(`[BROADCAST] ${deviceId.string} ${name}`, value);
+			const db = stageLinq.sources.getDBByUuid(value.databaseUuid);
+			console.info(value.databaseUuid, db?.uuid)
+			if (db && value.trackId) {
+				console.info(`Looking for trackId: ${value.trackId} in ${value.databaseUuid}`)
 				const track = await db.getTrackById(value.trackId);
-				console.log('[BROADCAST] Track Changed:', track);
+				console.info('[BROADCAST] Track Changed:', track);
 			}
 		})
+
+		async function dbTest() {
+			const dbstring = '0eb851d4-a9e1-466c-b398-2e8fcb61fcbd';
+			const sources = stageLinq.sources.getDatabases();
+			//console.dir(sources)
+			const thisDb = stageLinq.sources.getDBByUuid(dbstring);
+			console.log(sources.length, thisDb.uuid)
+		}
+
+		setTimeout(dbTest, 8000)
 	}
 
 
@@ -126,7 +153,7 @@ async function main() {
 				await sleep(250);
 				const track = StageLinq.status.getTrack(data.deviceId, deck);
 				console.log(`Now Playing: `, track);
-				if (stageLinqOptions.services.includes(Services.FileTransfer) && StageLinq.options.downloadDbSources) {
+				if (stageLinqOptions.services.includes(Services.FileTransfer) && StageLinq.options.downloadNowPlayingTrack) {
 					const file = await stageLinq.fileTransfer.getFileInfo(track.TrackNetworkPath);
 					await file.downloadFile()
 				}
@@ -148,8 +175,15 @@ async function main() {
 			stageLinq.stateMap.subscribe(deviceId);
 		});
 
-		StateMap.emitter.on('stateMessage', async (data: ServiceMessage<StateData>) => {
-			Logger.debug(`[STATEMAP] ${data.deviceId.string} ${data.message.name} => ${JSON.stringify(data.message.json)}`);
+		//stageLinq.stateMap.addListener(`/Client/Librarian/DevicesController/CurrentDeviceNetworkPath`, (data: ServiceMessage<StateData>) => StageLinq.sources.connectedSourceListener(data.message.json as JsonEntry, data.deviceId))
+
+
+		stageLinq.stateMap.on(`/Client/Librarian/DevicesController/CurrentDeviceNetworkPath`, (data: ServiceMessage<StateData>) => StageLinq.sources.connectedSourceListener(data.message.json, data.deviceId))
+
+
+		stageLinq.stateMap.on('stateMessage', async (data: ServiceMessage<StateData>) => {
+			//Logger.debug(`[STATEMAP] ${data.deviceId.string} ${data.message.name} => ${JSON.stringify(data.message.json)}`);
+			Logger.silent(`[STATEMAP] ${data.deviceId.string} ${data.message.name} =>`, data.message.json);
 		});
 
 	}
