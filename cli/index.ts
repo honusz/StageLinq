@@ -126,6 +126,7 @@ async function main() {
 			const db = stageLinq.sources.getDBByUuid(value.databaseUuid);
 			console.info(value.databaseUuid, db?.uuid)
 			if (db && value.trackId) {
+				console.warn(`Time since update: ${db.file.timeSinceUpdate() / 1000} ${value.trackId} ${db.maxId}`)
 				console.info(`Looking for trackId: ${value.trackId} in ${value.databaseUuid}`)
 				const track = await db.getTrackById(value.trackId);
 				console.info('[BROADCAST] Track Changed:', track);
@@ -137,7 +138,7 @@ async function main() {
 			const sources = stageLinq.sources.getDatabases();
 			//console.dir(sources)
 			const thisDb = stageLinq.sources.getDBByUuid(dbstring);
-			console.log(sources.length, thisDb.uuid)
+			console.log(sources.length, thisDb.uuid, 'max Id', thisDb.maxId)
 		}
 
 		setTimeout(dbTest, 8000)

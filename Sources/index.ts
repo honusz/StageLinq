@@ -38,7 +38,7 @@ export class Sources extends EventEmitter {
 
 		if (!source) return
 		const databases = source.getDatabases()
-		if (databases[0] && !databases[0].file?.isDownloaded) databases[0].downloadDB();
+		if (databases[0] && !databases[0].file?.status?.isDownloaded) databases[0].downloadDB();
 	}
 
 	getConnectedSources(): SourceName[] {
@@ -216,10 +216,17 @@ class Database {
 	file: File = null;
 	uuid: string = null;
 	private dbConnection: DbConnection = null;
+	private _maxId: number = 0;
 
 	constructor(dbFile: File) {
 		this.file = dbFile;
+
+		this.file.addListener('fileUpdated', () => this.updateMaxId.bind(this))
 		if (this.file.status.isDownloaded) this.processDB();
+	}
+
+	get maxId(): number {
+		return this._maxId
 	}
 
 	async open(): Promise<void> {
@@ -254,9 +261,12 @@ class Database {
 		this.uuid = result[0].uuid
 		StageLinq.sources.addDatabase(this);
 		//const sources = StageLinq.sources.getDatabases()
-
+		this._maxId = await db.getMaxId();
 		db.close();
 		//this.file.close()
+		//const maxId = await this.getMaxId()
+		//console.log('maxId', maxId);
+
 		this.file.close();
 		return this.uuid
 		// if (StageLinq.options.services.includes(Services.Broadcast)) {
@@ -272,4 +282,17 @@ class Database {
 		this.close()
 		return track || null
 	}
+
+	private async updateMaxId(): Promise<void> {
+		await this.open();
+		const filepath = this.file.localPath
+		//await this.file
+		const db = new DbConnection(filepath)
+
+		const maxId = await db.getMaxId();
+		if (maxId) this._maxId = maxId
+		this.close()
+	}
+
+	//SELECT MAX(Id) FROM Table
 }

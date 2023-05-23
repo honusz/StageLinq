@@ -54,7 +54,8 @@ export abstract class Transfer extends EventEmitter {
     readonly txid: number;
     readonly remotePath: string;
     protected _deviceId: DeviceId = null;
-    socket: Socket = null
+    socket: Socket = null;
+    protected _lastUpdateTime: number;
 
     constructor(socket: Socket, path: string,) {
         super();
@@ -135,6 +136,7 @@ const isPendingUpdate = 0x1000;
 const isUpdated = 0x10000;
 const isOpen = 0x100000;
 const isUpdating = 0x1000000;
+const isDownloading = 0x10000000;
 
 interface IStatus {
     isBusy: boolean;
@@ -144,6 +146,7 @@ interface IStatus {
     isUpdated: boolean;
     isOpen: boolean;
     isUpdating: boolean;
+    isDownloading: boolean;
 }
 // function fn(options) {
 //   if (options & isBusy) { console.log("1"); }
@@ -189,16 +192,9 @@ export class File extends Transfer {
         return this.remotePath.split('/').pop()
     }
 
-    get isDownloaded() {
-        return this.status.isDownloaded
-        //return (this._isDownloaded && (this.status === 'DOWNLOADED' || this.status === 'UPDATED'))
+    timeSinceUpdate(): number {
+        return Date.now() - this._lastUpdateTime
     }
-
-    // set isDownloaded(bool: boolean) {
-    //     this._isDownloaded = bool
-    //     if (bool) this.status = 'DOWNLOADED'
-    // }
-
 
     get status(): IStatus {
         return {
@@ -209,6 +205,7 @@ export class File extends Transfer {
             isUpdated: !!(this._status & isUpdated),
             isOpen: !!(this._status & isOpen),
             isUpdating: !!(this._status & isUpdating),
+            isDownloading: !!(this._status & isDownloading),
         }
     }
 
@@ -271,6 +268,7 @@ export class File extends Transfer {
             //this.hasPendingUpdate = true;
             //this.status = 'PENDINGUPDATE'
             this.setStatus(isPendingUpdate)
+
             this.setFileSize(data.message.size)
             this.chunkUpdates.push(message.byteRange);
             this.updateChunkRange();
@@ -339,6 +337,8 @@ export class File extends Transfer {
         if (!this.chunkUpdatesPending) {
             Logger.debug(`${this.fileName} Updated! Chunks written ${this.chunksUpdated} of ${this.chunksToUpdate}`)
             //this.hasPendingUpdate = false;
+            this._lastUpdateTime = Date.now()
+            this.emit('fileUpdated', this);
             this.clearStatus(isPendingUpdate | isBusy)
             //this.setStatus(is)
         }
@@ -374,7 +374,7 @@ export class File extends Transfer {
         Logger.debug('downloadFile called', this.status)
         if (this.checkStatus(isBusy | isOpen)) return
         //if (this.status.isOpen) return
-
+        this.setStatus(isDownloading)
         this.setStatus(isBusy)
         try {
             const localPath = _localPath || this.localPath
@@ -399,9 +399,11 @@ export class File extends Transfer {
             this.fileStream = null;
             //this.isDownloaded = true;
             this.clearStatus(isBusy)
+            this.clearStatus(isDownloading)
             this.setStatus(isDownloaded)
             //console.warn(this.status)
             // console.warn(`bytes written returning ${bytesWritten}`)
+            this._lastUpdateTime = Date.now();
             return bytesWritten;
         } catch (err) {
             //this.isDownloaded = false
@@ -415,6 +417,7 @@ export class File extends Transfer {
         this.chunks = Math.ceil(this.size / CHUNK_SIZE);
         this.chunkCheck = new Array(this.chunks).fill(false)
         this.setStatus(isDownloadable)
+
     }
 
     get asSourceName(): SourceName {

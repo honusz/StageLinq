@@ -84,6 +84,10 @@ export class DbConnection {
 		return result[0];
 	}
 
+	async getMaxId(): Promise<number> {
+		const result: number[] = this.querySource('SELECT MAX(id) FROM Track')
+		return Object.values(result.shift()).shift()
+	}
 
 	/**
 	 * Close DB Connection
