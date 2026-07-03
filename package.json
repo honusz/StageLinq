@@ -45,7 +45,7 @@
     "console-stamp": "^3.0.3",
     "file-type": "^16.5.3",
     "ip": "^1.1.5",
-    "metadata-connect": "file:../metadata-connect",
+    "metadata-connect": "^1.1.10",
     "minimist": "^1.2.5",
     "promise-socket": "^7.0.0"
   },
@@ -62,5 +62,11 @@
   },
   "overrides": {
     "rollup": ">=4.59.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.5.0": true,
+    "core-js@3.47.0": true,
+    "fsevents@2.3.3": true,
+    "esbuild@0.27.2": true
   }
 }
