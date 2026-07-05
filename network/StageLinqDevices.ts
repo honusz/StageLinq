@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import { NetworkDevice } from '.';
 import { Player } from '../devices/Player';
 import { formatToken, sleep } from '../utils';
-import { FileTransfer, StateData, StateMap } from '../services';
+import { FileTransfer, StateData, StateMap, BeatInfo, BeatData } from '../services';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 import { Databases } from '../Databases';
@@ -12,7 +12,8 @@ enum ConnectionStatus { CONNECTING, CONNECTED, FAILED };
 
 interface StageLinqDevice {
   networkDevice: NetworkDevice;
-  fileTransferService: FileTransfer | null;
+  fileTransferService?: FileTransfer | null;
+  beatInfoService?: BeatInfo | null;
 };
 
 // Initial poll interval for device discovery — just long enough for discovery
@@ -27,6 +28,7 @@ export declare interface StageLinqDevices {
   on(event: 'nowPlaying', listener: (status: PlayerStatus) => void): this;
   on(event: 'connected', listener: (connectionInfo: ConnectionInfo) => void): this;
   on(event: 'message', listener: (connectionInfo: ConnectionInfo, message: ServiceMessage<StateData>) => void): this;
+  on(event: 'beatMessage', listener: (connectionInfo: ConnectionInfo, message: ServiceMessage<BeatData>) => void): this;
   on(event: 'ready', listener: () => void): this;
 }
 
@@ -100,6 +102,16 @@ export class StageLinqDevices extends EventEmitter {
   getFileTransferService(deviceId: string): FileTransfer | null {
     const device = this.devices.get(deviceId);
     return device?.fileTransferService ?? null;
+  }
+
+  /**
+   * Get the BeatInfo service for a specific device.
+   * @param deviceId Device ID (e.g., "net://uuid-token")
+   * @returns BeatInfo service or null if not available
+   */
+  getBeatInfoService(deviceId: string): BeatInfo | null {
+    const device = this.devices.get(deviceId);
+    return device?.beatInfoService ?? null;
   }
 
   async downloadFile(deviceId: string, path: string) {
@@ -212,6 +224,8 @@ export class StageLinqDevices extends EventEmitter {
 
         // Setup file transfer service
         await this.setupFileTransferService(networkDevice, connectionInfo);
+        // Setup BeatInfo service
+        await this.setupBeatInfoService(networkDevice, connectionInfo);
 
         // Download the database
         if (this.options.enableFileTranfer && this.options.downloadDbSources) {
@@ -249,22 +263,45 @@ export class StageLinqDevices extends EventEmitter {
 
   private async setupFileTransferService(networkDevice: NetworkDevice, connectionInfo: ConnectionInfo) {
     const sourceId = this.sourceId(connectionInfo);
+    
+    let thisDevice = this.devices.get(`net://${sourceId}`);
+    if (!thisDevice) {
+      thisDevice = {
+        networkDevice: networkDevice,
+      } as StageLinqDevice
+    }
 
     if (this.options.enableFileTranfer) {
       this.logger.info(`Starting file transfer for ${this.deviceId(connectionInfo)}`);
-      const fileTransferService = await networkDevice.connectToService(FileTransfer);
-      this.devices.set(`net://${sourceId}`, {
-        networkDevice: networkDevice,
-        fileTransferService: fileTransferService
-      });
+      thisDevice.fileTransferService = await networkDevice.connectToService(FileTransfer);
+      this.devices.set(`net://${sourceId}`, thisDevice);
+      console.log('reached');
     } else {
-      this.devices.set(`net://${sourceId}`, {
+      thisDevice.fileTransferService = null;
+      this.devices.set(`net://${sourceId}`, thisDevice);
+    }
+  }
+
+  private async setupBeatInfoService(networkDevice: NetworkDevice, connectionInfo: ConnectionInfo) {
+    const sourceId = this.sourceId(connectionInfo);
+
+    let thisDevice = this.devices.get(`net://${sourceId}`);
+    if (!thisDevice) {
+      thisDevice = {
         networkDevice: networkDevice,
-        fileTransferService: null
-      });
+      } as StageLinqDevice
     }
 
-
+    if (this.options.enableBeatInfo) {
+      this.logger.info(`Starting BeatInfo for ${this.deviceId(connectionInfo)}`);
+      thisDevice.beatInfoService = await networkDevice.connectToService(BeatInfo);
+      thisDevice.beatInfoService.on('beatMessage', (msg:ServiceMessage<BeatData>) => this.emit('beatMessage', connectionInfo, msg));
+      this.devices.set(`net://${sourceId}`, thisDevice);
+      console.log('reached');
+    } else {
+      thisDevice.beatInfoService = null;
+      this.devices.set(`net://${sourceId}`, thisDevice);
+    }
   }
 
   /**

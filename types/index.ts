@@ -54,6 +54,7 @@ export interface StageLinqOptions {
 	actingAs?: DiscoveryMessageOptions;
 	downloadDbSources?: boolean;
 	enableFileTranfer?: boolean;
+	enableBeatInfo?: boolean;
 	/** Callback invoked for every packet sent/received. Use for debugging/logging. */
 	networkTap?: NetworkTapCallback;
 	/** Logger implementation. If not provided, a no-op logger is used (silent). */

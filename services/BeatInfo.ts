@@ -28,9 +28,39 @@ export interface DeckBeatData {
   samples?: number;
 }
 
+/**
+ * Wraps the device's 64-bit clock value. Plain `bigint`s throw when passed to
+ * JSON.stringify, so this class carries the value through as a bigint for
+ * arithmetic/comparisons while serializing as a string via toJSON().
+ */
+export class BeatClock {
+  private readonly value: bigint;
+
+  constructor(value: bigint | number | string) {
+    this.value = BigInt(value);
+  }
+
+  /** The underlying clock value as a bigint */
+  toBigInt(): bigint {
+    return this.value;
+  }
+
+  valueOf(): bigint {
+    return this.value;
+  }
+
+  toString(): string {
+    return this.value.toString();
+  }
+
+  toJSON(): string {
+    return this.value.toString();
+  }
+}
+
 export interface BeatData {
   /** Timestamp/clock value */
-  clock: bigint;
+  clock: BeatClock;
   /** Number of decks */
   deckCount: number;
   /** Beat data for each deck */
@@ -78,7 +108,7 @@ export class BeatInfo extends Service<BeatData> {
     const ctx = new WriteContext();
     // BeatInfo subscription message: 8 bytes of zeros
     ctx.write(new Uint8Array([0x0, 0x0, 0x0, 0x4, 0x0, 0x0, 0x0, 0x0]));
-    await this.write(ctx);
+    await this.connection!.write(ctx.getBuffer());
   }
 
   /**
@@ -92,7 +122,7 @@ export class BeatInfo extends Service<BeatData> {
     }
 
     const id = ctx.readUInt32();
-    const clock = ctx.readUInt64();
+    const clock = new BeatClock(ctx.readUInt64());
     const deckCount = ctx.readUInt32();
 
     const decks: DeckBeatData[] = [];
@@ -112,7 +142,7 @@ export class BeatInfo extends Service<BeatData> {
         decks[i].samples = ctx.readFloat64();
       }
     }
-
+    
     const message: ServiceMessage<BeatData> = {
       id,
       message: {
@@ -121,7 +151,7 @@ export class BeatInfo extends Service<BeatData> {
         decks,
       },
     };
-
+    
     return message;
   }
 
@@ -132,12 +162,12 @@ export class BeatInfo extends Service<BeatData> {
     if (!data?.message) {
       return;
     }
-
+    
     const shouldEmit = this.shouldEmitBeat(data.message);
     this.currentBeatData = data.message;
-
+    
     if (shouldEmit) {
-      this.emit('beatMessage', data.message);
+      this.emit('beatMessage', data);
     }
   }
 

@@ -12,6 +12,7 @@
 import { StageLinqInstance } from '../StageLinq';
 import { ActingAsDevice } from '../types';
 import { sleep } from '../utils/sleep';
+import { formatToken } from '../utils/token';
 
 require('console-stamp')(console, {
   format: ':date(HH:MM:ss) :label',
@@ -26,13 +27,16 @@ async function main() {
   const stageLinq = new StageLinqInstance({
     actingAs: ActingAsDevice.NowPlaying,
     downloadDbSources: false,
+    enableBeatInfo: true,
     maxRetries: 3,
+    logger: {
+      trace: () => {},
+      debug: (msg: string, ...args: unknown[]) => console.debug(msg, ...args),
+      info: (msg: string, ...args: unknown[]) => console.info(msg, ...args),
+      warn: (msg: string, ...args: unknown[]) => console.warn(msg, ...args),
+      error: (msg: string, ...args: unknown[]) => console.error(msg, ...args),
+    },
   });
-
-  // Setup logging
-  stageLinq.logger.on('error', (...args: any) => console.error(...args));
-  stageLinq.logger.on('warn', (...args: any) => console.warn(...args));
-  stageLinq.logger.on('info', (...args: any) => console.info(...args));
 
   // Track connection
   stageLinq.devices.on('connected', (info) => {
@@ -44,6 +48,16 @@ async function main() {
     console.log('Ready! Listening for beat information...');
     console.log('Press Ctrl+C to exit.');
     console.log('');
+  });
+
+  stageLinq.devices.on('beatMessage', (connectionInfo, msg) => {
+    let decks:string = "";
+    try {
+      decks = JSON.stringify(msg?.message?.decks);
+    } catch (err) {
+      console.error(err);
+    }
+    console.log(`BEATINFO [${formatToken(connectionInfo.token)}] ${JSON.stringify(msg)}`);
   });
 
   // Display now playing info
