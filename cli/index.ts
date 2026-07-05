@@ -65,31 +65,19 @@ async function main() {
 
     // What device to emulate on the network.
     // (default: Now Playing)
-    actingAs: ActingAsDevice.NowPlaying
+    actingAs: ActingAsDevice.NowPlaying,
+
+    // Setup how you want to handle logs coming from StageLinq
+    logger: {
+      trace: () => {}, // Note: trace is very verbose, skipped by default.
+      debug: (msg: string, ...args: unknown[]) => console.debug(msg, ...args),
+      info: (msg: string, ...args: unknown[]) => console.info(msg, ...args),
+      warn: (msg: string, ...args: unknown[]) => console.warn(msg, ...args),
+      error: (msg: string, ...args: unknown[]) => console.error(msg, ...args),
+    },
   }
 
   const stageLinq = new StageLinqInstance(stageLinqOptions);
-
-  // Setup how you want to handle logs coming from StageLinq
-  stageLinq.logger.on('error', (...args: any) => {
-    console.error(...args);
-  });
-  stageLinq.logger.on('warn', (...args: any) => {
-    console.warn(...args);
-  });
-  stageLinq.logger.on('info', (...args: any) => {
-    console.info(...args);
-  });
-  stageLinq.logger.on('log', (...args: any) => {
-    console.log(...args);
-  });
-  stageLinq.logger.on('debug', (...args: any) => {
-    console.debug(...args);
-  });
-  // Note: Silly is very verbose!
-  // stageLinq.logger.on('silly', (...args: any) => {
-  //   console.debug(...args);
-  // });
 
   // Fires when we connect to any device
   stageLinq.devices.on('connected', async (connectionInfo) => {
