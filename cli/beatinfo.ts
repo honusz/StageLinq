@@ -51,12 +51,6 @@ async function main() {
   });
 
   stageLinq.devices.on('beatMessage', (connectionInfo, msg) => {
-    let decks:string = "";
-    try {
-      decks = JSON.stringify(msg?.message?.decks);
-    } catch (err) {
-      console.error(err);
-    }
     console.log(`BEATINFO [${formatToken(connectionInfo.token)}] ${JSON.stringify(msg)}`);
   });
 
